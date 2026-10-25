@@ -33,9 +33,11 @@ For a production build: `bun run build && bun run start` (same port).
    files: it is used in place, never copied) or upload a file (copied
    into `uploads/`). To import a batch of clips from a notes file in
    one go, see [Clips from a notes file](#clips-from-a-notes-file).
-2. **Pick a range** - scrub with the timeline, the arrow keys, or click
-   around the player, then press `I` (in) and `O` (out). Space toggles
-   playback; `Shift` + arrow seeks one frame.
+2. **Pick a range** - click the timeline to seek, drag on it to draw
+   the in/out range (right-click the range to clear it), or press
+   `I` (in) and `O` (out) at the playhead. Without a range, playback
+   runs free; with a range set, playback loops it so you can preview
+   the clip. Space toggles playback; `Shift` + arrow seeks one frame.
 3. **Crop (optional)** - click and drag a rectangle over the video (a
    plain click plants a small crop at that point). You can move it,
    resize it from any of the 8 handles, and lock the aspect ratio
@@ -53,12 +55,13 @@ For a production build: `bun run build && bun run start` (same port).
    the MP4 and GIF appear in the EXPORTS panel. Files are also written to
    `out/<video-id>/` on disk.
 
-Clicking a clip in the list jumps the player to that clip's start as a
-preview; click on empty space, press `Esc`, or use the back button in
-the transport row to return to where you were.
+Clicking a clip in the list jumps the player to that clip's start and
+selects it as a preview; click on empty space, press `Esc`, or use
+the back button in the transport row to return to where you were and
+deselect the clip.
 
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
-`shift` + `left`/`right` = one frame, `esc` back from a clip preview.
+`shift` + `left`/`right` = one frame, `esc` back from a clip preview (deselects it).
 
 ## Clips from a notes file
 

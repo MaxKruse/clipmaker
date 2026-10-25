@@ -8,6 +8,8 @@ interface Props {
   selectedId: string | null;
   exporting: boolean;
   exportError: string | null;
+  /** Add clip is only possible with a live in/out range. */
+  canAdd: boolean;
   onAdd: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -15,20 +17,20 @@ interface Props {
 }
 
 export function ClipQueue({
-  clips, selectedId, exporting, exportError, onAdd, onSelect, onDelete, onExport,
+  clips, selectedId, exporting, exportError, canAdd, onAdd, onSelect, onDelete, onExport,
 }: Props) {
   return (
     <div data-clips-panel className="panel p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="label">Clips ({clips.length})</span>
-        <button className="btn btn-sm" onClick={onAdd}>
+        <button className="btn btn-sm" disabled={!canAdd || exporting} onClick={onAdd}>
           Add clip
         </button>
       </div>
       <div className="flex flex-col gap-1">
         {clips.length === 0 && (
           <span className="text-xs text-muted">
-            Scrub the player, press I / O to mark a range, then "Add clip".
+            Click the timeline to seek, drag to mark a range (right-click it to clear), then "Add clip".
           </span>
         )}
         {clips.map((c, i) => (

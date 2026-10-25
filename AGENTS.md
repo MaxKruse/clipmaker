@@ -110,7 +110,12 @@ Key invariants:
 - `page.tsx` owns all state; components are presentational. The
   **draft model**: a single working `ClipSpec` that mirrors the selected
   committed clip (`updateDraft` writes to both). "Add clip" commits a
-  copy with a fresh id; selecting a clip loads it into the draft.
+  copy with a fresh id; selecting a clip loads it into the draft. The
+  **in/out range is optional** (`hasRange` in page.tsx): a fresh video
+  starts with none, so playback is free. A range becomes live via a
+  timeline drag, I/O, the In/Out inputs, or selecting a clip. "Add
+  clip" requires a live range; playback loops the range only while one
+  is live.
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
@@ -119,6 +124,11 @@ Key invariants:
   the video crops (click = plant, drag = draw, move, 8 resize handles);
   clicking the video never toggles playback. Letterbox clicks clamp to
   the frame in `normalizeCrop`.
+- **Timeline interactions**: click = seek, drag on the empty track =
+  draw a new in/out range (live while dragging), drag the range = move
+  it, drag its edge handles = resize, right-click on the range = clear
+  it (back to free playback). The selection region only renders while
+  a range is live.
 - Clip batch import is client-side: `clipsTxt.ts` parses `m:ss - m:ss
   note` lines (h:mm:ss too) and `# header` sections; with several
   sections only the one whose header contains the active video's file
@@ -131,12 +141,12 @@ Key invariants:
   clicking inert background (a document-level click listener ignores
   `closest("[data-clips-panel], [data-player], button, input, a, select,
   textarea)"), pressing `Esc`, or the back button in the Stage transport
-  row. Playing, setting in/out, scrubbing, and switching/removing the
-  video clear the pending return.
+  row. Leaving the preview also deselects the clip and clears its
+  range (back to free playback). Playing, setting in/out, scrubbing,
+  and switching/removing the video clear the pending return.
 - Jobs are polled every 1s; the video list is loaded once.
 
 ## Gotchas
-
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
   transpile. Do not bump it.
 - ffmpeg/ffprobe discovery order: `CLIPMAKER_FFMPEG`/`CLIPMAKER_FFPROBE`

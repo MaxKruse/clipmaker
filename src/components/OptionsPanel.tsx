@@ -46,6 +46,8 @@ function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) =
 
 interface Props {
   video: VideoInfo;
+  /** In/out bounds; null = no range set (inputs disabled). */
+  inOut: { start: number; end: number } | null;
   draft: ClipSpec;
   aspect: Aspect;
   onChange: (patch: Partial<ClipSpec>) => void;
@@ -54,7 +56,7 @@ interface Props {
 }
 
 export function OptionsPanel({
-  video, draft, aspect, onChange, onAspect, onClearCrop,
+  video, draft, inOut, aspect, onChange, onAspect, onClearCrop,
 }: Props) {
   const toggleFormat = (f: Format) => {
     const has = draft.formats.includes(f);
@@ -87,11 +89,19 @@ export function OptionsPanel({
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1.5">
           <span className="label">In</span>
-          <TimeInput value={draft.start} onCommit={(t) => onChange({ start: Math.min(t, draft.end - 0.2) })} />
+          {inOut ? (
+            <TimeInput value={inOut.start} onCommit={(t) => onChange({ start: Math.min(t, inOut.end - 0.2) })} />
+          ) : (
+            <input className="input w-full font-mono" value="" placeholder="--:--" disabled />
+          )}
         </div>
         <div className="flex flex-col gap-1.5">
           <span className="label">Out</span>
-          <TimeInput value={draft.end} onCommit={(t) => onChange({ end: Math.max(t, draft.start + 0.2) })} />
+          {inOut ? (
+            <TimeInput value={inOut.end} onCommit={(t) => onChange({ end: Math.max(t, inOut.start + 0.2) })} />
+          ) : (
+            <input className="input w-full font-mono" value="" placeholder="--:--" disabled />
+          )}
         </div>
       </div>
 

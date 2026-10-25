@@ -29,6 +29,9 @@ export default function Page() {
   // Position before a clip-preview jump; restored by clicking inert
   // background, Esc, or the Back button in the transport row.
   const [returnTo, setReturnTo] = useState<number | null>(null);
+  // The range is only "live" once the user sets it (timeline draw,
+  // I/O keys, In/Out inputs). Without a range, playback is free.
+  const [hasRange, setHasRange] = useState(false);
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -70,6 +73,7 @@ export default function Page() {
     setExportError(null);
     setDraft(freshDraft(video));
     setReturnTo(null);
+    setHasRange(false);
   };
 
   const onAdded = (v: VideoInfo) => {
@@ -116,9 +120,9 @@ export default function Page() {
     }
   };
 
-  // Loop the selection while playing.
+  // Loop the range while playing - only when a range is live.
   const onTime = (t: number) => {
-    if (playing && draft.end > draft.start && t >= draft.end) {
+    if (playing && hasRange && draft.end > draft.start && t >= draft.end) {
       seek(draft.start);
       return;
     }
@@ -138,14 +142,35 @@ export default function Page() {
   const setIn = (t: number) => {
     setReturnTo(null);
     seek(t);
-    updateDraft({ start: Math.max(0, Math.min(t, draft.end - 0.2)) });
+    setHasRange(true);
+    const dur = active?.duration ?? t;
+    const start = Math.max(0, Math.min(t, dur - 0.2));
+    const end = Math.min(dur, Math.max(start + 0.2, draft.end));
+    updateDraft({ start, end });
   };
 
   const setOut = (t: number) => {
     setReturnTo(null);
     seek(t);
-    updateDraft({ end: Math.min(active?.duration ?? t, Math.max(t, draft.start + 0.2)) });
+    setHasRange(true);
+    const dur = active?.duration ?? t;
+    const end = Math.max(0.2, Math.min(t, dur));
+    const start = Math.max(0, Math.min(draft.start, end - 0.2));
+    updateDraft({ start, end });
   };
+
+  // Timeline drag draws a new range (live while dragging).
+  const onDraw = (a: number, b: number) => {
+    setReturnTo(null);
+    setHasRange(true);
+    const dur = active?.duration ?? b;
+    const start = Math.max(0, Math.min(a, dur - 0.2));
+    const end = Math.min(dur, Math.max(b, start + 0.2));
+    updateDraft({ start, end });
+  };
+
+  // Right-click on the range clears it (back to free playback).
+  const clearRange = () => setHasRange(false);
 
   const selectClip = (id: string) => {
     const c = activeClips.find((x) => x.id === id);
@@ -158,25 +183,29 @@ export default function Page() {
       gif: { ...c.gif },
       crop: c.crop ? { ...c.crop } : null,
     });
+    setHasRange(true);
     // Jump to the clip's start for a preview; remember where we were
     // before the first jump so "back" can restore it.
     if (returnTo === null) setReturnTo(videoRef.current?.currentTime ?? time);
     seek(c.start);
   };
 
-  const goBack = () => {
-    if (returnTo === null) return;
+  // Leaving a clip preview: restore the previous position (if any),
+  // deselect the clip, and clear its range back to free playback.
+  const leavePreview = () => {
     const v = videoRef.current;
-    if (v) v.currentTime = returnTo;
+    if (returnTo !== null && v) v.currentTime = returnTo;
     setReturnTo(null);
+    setSelectedId(null);
+    setHasRange(false);
+    if (active) setDraft(freshDraft(active));
   };
 
-  // A click on inert background cancels the preview and restores the
-  // previous position. Clicks on the clips list, the player (stage +
-  // timeline), and any control count as "doing something else".
+  // A click on inert background leaves the preview the same way as
+  // Esc. Clicks on the clips list, the player (stage + timeline), and
+  // any control count as "doing something else".
   useEffect(() => {
     if (returnTo === null) return;
-    const t0 = returnTo;
     const onDocClick = (e: MouseEvent) => {
       const el = e.target;
       if (
@@ -184,16 +213,14 @@ export default function Page() {
         el.closest("[data-clips-panel], [data-player], button, input, a, select, textarea")
       )
         return;
-      const v = videoRef.current;
-      if (v) v.currentTime = t0;
-      setReturnTo(null);
+      leavePreview();
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
   }, [returnTo]);
 
   const addClip = () => {
-    if (!activeId) return;
+    if (!activeId || !hasRange) return;
     const c: ClipSpec = {
       ...draft,
       id: newId(),
@@ -229,7 +256,7 @@ export default function Page() {
       if (rest[0]) selectClip(rest[0].id);
       else {
         setSelectedId(null);
-        if (active) setDraft(freshDraft(active));
+        setHasRange(false);
       }
     }
   };
@@ -301,13 +328,13 @@ export default function Page() {
               onOut={setOut}
               onCropChange={(c) => updateDraft({ crop: c })}
               returnTo={returnTo}
-              onBack={goBack}
+              onBack={leavePreview}
             />
             <Timeline
               duration={active.duration}
               time={time}
-              inPoint={draft.start}
-              outPoint={draft.end}
+              inPoint={hasRange ? draft.start : null}
+              outPoint={hasRange ? draft.end : null}
               onScrub={(t) => {
                 setReturnTo(null);
                 seek(t);
@@ -315,6 +342,8 @@ export default function Page() {
               onIn={setIn}
               onOut={setOut}
               onMoveSel={(a, b) => updateDraft({ start: a, end: b })}
+              onDraw={onDraw}
+              onClearRange={clearRange}
             />
             <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
           </div>
@@ -322,6 +351,7 @@ export default function Page() {
             <OptionsPanel
               video={active}
               draft={draft}
+              inOut={hasRange ? { start: draft.start, end: draft.end } : null}
               aspect={aspect}
               onChange={updateDraft}
               onAspect={setAspect}
@@ -331,6 +361,7 @@ export default function Page() {
               clips={activeClips}
               selectedId={selectedId}
               exporting={exporting}
+              canAdd={hasRange}
               exportError={exportError}
               onAdd={addClip}
               onSelect={selectClip}
