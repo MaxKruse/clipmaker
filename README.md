@@ -11,6 +11,29 @@ used automatically when available). Your clip lists are saved per
 video as project files (`.data/clips.json`) and survive reloads and
 restarts.
 
+## At a glance
+
+![](docs/screenshot-1-add.png)
+
+Freshly loaded: the video plays on the left, the clip queue is on the
+right. "Add clip" glows until you pick a starting point.
+
+![](docs/screenshot-2-times.png)
+
+Setting the times: the timeline below the player glows - drag on it to
+mark the in and out points.
+
+![](docs/screenshot-3-crop.png)
+
+Optional crop: the player glows while you drag a rectangle over the
+frame.
+
+![](docs/screenshot-4-main.png)
+
+The finished clip: the crop box sits over the frame, the timeline holds
+the in/out range, and the clip (with its MP4/GIF and crop chips) is
+ready in the queue.
+
 ## How to run
 
 Prerequisites:
