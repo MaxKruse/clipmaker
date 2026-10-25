@@ -14,8 +14,8 @@ interface StageProps {
   playing: boolean;
   duration: number;
   fps: number;
-  inPoint: number;
-  outPoint: number;
+  inPoint: number | null;
+  outPoint: number | null;
   crop: CropBox | null;
   aspect: Aspect;
   onTogglePlay: (p: boolean) => void;
@@ -34,7 +34,7 @@ interface StageProps {
 /** The video player with transport row and the crop overlay. */
 export function Stage(props: StageProps) {
   const {
-    src, srcW, srcH, videoRef, time, playing, duration, fps,
+    src, srcW, srcH, videoRef, time, playing, duration, fps, inPoint, outPoint,
     crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
     returnTo, onBack,
@@ -43,6 +43,16 @@ export function Stage(props: StageProps) {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [vol, setVol] = useState(1);
   const [muted, setMuted] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const [scrubbing, setScrubbing] = useState(false);
+
+  // Secondary scrubber under the video: click seeks, drag scrubs.
+  const seekAt = (clientX: number) => {
+    const r = barRef.current?.getBoundingClientRect();
+    if (!r || r.width === 0) return;
+    const f = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+    onSeek(f * duration);
+  };
 
   useEffect(() => {
     const el = boxRef.current;
@@ -128,7 +138,35 @@ export function Stage(props: StageProps) {
           />
         )}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-2 px-1 pb-1">
+      <div
+        ref={barRef}
+        title="click or drag to scrub"
+        className="group relative my-2 h-2.5 cursor-pointer touch-none select-none rounded-full bg-track"
+        onPointerDown={(e) => {
+          (e.target as HTMLElement).setPointerCapture(e.pointerId);
+          setScrubbing(true);
+          seekAt(e.clientX);
+        }}
+        onPointerMove={(e) => {
+          if (scrubbing) seekAt(e.clientX);
+        }}
+        onPointerUp={() => setScrubbing(false)}
+      >
+        {inPoint != null && outPoint != null && outPoint > inPoint && (
+          <div
+            className="absolute top-0 h-full rounded-full bg-accent/30"
+            style={{
+              left: `${(inPoint / Math.max(duration, 0.001)) * 100}%`,
+              width: `${((outPoint - inPoint) / Math.max(duration, 0.001)) * 100}%`,
+            }}
+          />
+        )}
+        <div
+          className="pointer-events-none absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-bg bg-accent"
+          style={{ left: `${(time / Math.max(duration, 0.001)) * 100}%` }}
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-2 px-1 pb-1">
         <button className="btn btn-sm" onClick={() => onTogglePlay(!playing)}>
           {playing ? "Pause" : "Play"}
         </button>

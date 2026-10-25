@@ -316,8 +316,8 @@ export default function Page() {
               playing={playing}
               duration={active.duration}
               fps={active.fps}
-              inPoint={draft.start}
-              outPoint={draft.end}
+              inPoint={hasRange ? draft.start : null}
+              outPoint={hasRange ? draft.end : null}
               crop={draft.crop}
               aspect={aspect}
               onTogglePlay={togglePlay}

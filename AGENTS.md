@@ -124,6 +124,10 @@ Key invariants:
   the video crops (click = plant, drag = draw, move, 8 resize handles);
   clicking the video never toggles playback. Letterbox clicks clamp to
   the frame in `normalizeCrop`.
+- The Stage has a secondary scrub bar under the video (above the
+  transport row): click/drag seeks across the full duration and shows
+  the live in/out band. Stage's `inPoint`/`outPoint` props are
+  nullable - the page passes `null` while no range is live.
 - **Timeline interactions**: click = seek, drag on the empty track =
   draw a new in/out range (live while dragging), drag the range = move
   it, drag its edge handles = resize, right-click on the range = clear
