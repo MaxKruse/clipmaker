@@ -144,8 +144,10 @@ export function CropOverlay({ frame, srcW, srcH, crop, aspect, onChange }: Props
         <div
           className="absolute"
           style={{
-            left: cs(crop.x),
-            top: cs(crop.y),
+            // Box is positioned inside the full-stage overlay, so add the
+            // frame offset (toSrc subtracts it; rendering must add it).
+            left: frame.x + crop.x * s,
+            top: frame.y + crop.y * s,
             width: cs(crop.w),
             height: cs(crop.h),
             boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
