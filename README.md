@@ -38,6 +38,11 @@ For a production build: `bun run build && bun run start` (same port).
    `I` (in) and `O` (out) at the playhead. Without a range, playback
    runs free; with a range set, playback loops it so you can preview
    the clip. Space toggles playback; `Shift` + arrow seeks one frame.
+   Scroll on the timeline to zoom - 60 seconds at closest, the whole
+   video at furthest; `Shift` + scroll or `Shift` + drag pans the
+   view, and double-click (or the `fit` button) returns to the whole
+   video. While dragging the range near a track edge, the view
+   auto-scrolls, so you can carry a clip across the whole video.
 3. **Crop (optional)** - click and drag a rectangle over the video (a
    plain click plants a small crop at that point). You can move it,
    resize it from any of the 8 handles, and lock the aspect ratio

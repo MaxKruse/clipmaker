@@ -128,7 +128,15 @@ Key invariants:
   draw a new in/out range (live while dragging), drag the range = move
   it, drag its edge handles = resize, right-click on the range = clear
   it (back to free playback). The selection region only renders while
-  a range is live.
+  a range is live. The track shows a zoomable time window
+  (`view` state in Timeline.tsx): wheel = zoom at the mouse position
+  (min span 60s, max span = whole video, default = whole video),
+  shift+wheel or shift+drag = scroll, double-click = fit. When zoomed,
+  a range chip and a `fit` button overlay the top-right corner. While
+  a range is being drawn/moved near a track edge, the view auto-pans
+  (rAF loop in Timeline.tsx): the dragged content's time references
+  shift with the view and the live onDraw/onMoveSel callbacks re-fire,
+  so the content follows the pointer and the draft stays in sync.
 - Clip batch import is client-side: `clipsTxt.ts` parses `m:ss - m:ss
   note` lines (h:mm:ss too) and `# header` sections; with several
   sections only the one whose header contains the active video's file
