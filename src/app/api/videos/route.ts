@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
         if (written > MAX_UPLOAD_BYTES) throw new Error("upload too large");
         if (!ws.write(Buffer.from(value))) await once(ws, "drain");
       }
+      ws.end();
       await once(ws, "finish");
     } catch (e) {
       ws.destroy();

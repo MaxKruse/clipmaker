@@ -23,10 +23,14 @@ export function VideoLoader({ videos, activeId, onSelect, onRemove, onAdded }: P
     setBusy(f.name);
     setError(null);
     try {
+      // Send the File as a plain Blob body, not f.stream() + duplex:
+      // Chromium's duplex fetch to the Bun dev server fails at the
+      // connection level (ERR_ALPN_NEGOTIATION_FAILED). Blob bodies are
+      // still streamed from disk by the browser, not read into memory.
       const res = await fetch("/api/videos", {
         method: "POST",
         headers: { "x-filename": encodeURIComponent(f.name) },
-        body: f.stream(),
+        body: f,
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? res.statusText);
