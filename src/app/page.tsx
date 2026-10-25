@@ -9,6 +9,7 @@ import { OptionsPanel } from "@/components/OptionsPanel";
 import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
 import { VideoLoader } from "@/components/VideoLoader";
+import type { TxtClip } from "@/lib/clipsTxt";
 import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
 const freshDraft = (v: VideoInfo): ClipSpec => ({
@@ -161,6 +162,21 @@ export default function Page() {
     setSelectedId(c.id);
   };
 
+  // Add parsed clip ranges (from a Clips .txt) to the active video,
+  // clamped to its duration.
+  const importClips = (raw: TxtClip[]) => {
+    if (!activeId || !active) return;
+    const list = raw
+      .map((r) => ({
+        ...defaultClip(r.note),
+        start: r.start,
+        end: Math.min(r.end, active.duration),
+      }))
+      .filter((c) => c.start < active.duration && c.end - c.start > 0.2);
+    if (!list.length) return;
+    setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), ...list] }));
+  };
+
   const deleteClip = (id: string) => {
     if (!activeId) return;
     const rest = (clips[activeId] ?? []).filter((c) => c.id !== id);
@@ -212,7 +228,9 @@ export default function Page() {
         activeId={activeId}
         onSelect={(id) => selectVideo(id)}
         onRemove={removeVideo}
+        activeName={active?.name ?? null}
         onAdded={onAdded}
+        onLoadClips={importClips}
       />
 
       {active ? (

@@ -30,8 +30,12 @@ For a production build: `bun run build && bun run start` (same port).
 ## How to use it
 
 1. **Load a video** - either type a local file path (recommended for big
-   files: it is used in place, never copied) or upload a file (copied into
-   `uploads/`).
+   files: it is used in place, never copied) or upload a file (copied
+   into `uploads/`). Once a video is active you can also **import clip
+   ranges from a notes file** via "Clips (.txt)": lines like
+   `14:47 - 15:22 Cute` (also `1:02:03`-style times) each become a clip;
+   `# <video name>` header lines split the file into per-VOD sections,
+   and only the section whose name matches the active video is imported.
 2. **Pick a range** - scrub with the timeline, the arrow keys, or click
    around the player, then press `I` (in) and `O` (out). Space toggles
    playback; `Shift` + arrow seeks one frame.

@@ -21,6 +21,7 @@ src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
 src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
+src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif stages/preview)
 src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
@@ -118,6 +119,12 @@ Key invariants:
   the video crops (click = plant, drag = draw, move, 8 resize handles);
   clicking the video never toggles playback. Letterbox clicks clamp to
   the frame in `normalizeCrop`.
+- Clip batch import is client-side: `clipsTxt.ts` parses `m:ss - m:ss
+  note` lines (h:mm:ss too) and `# header` sections; with several
+  sections only the one whose header contains the active video's file
+  name is imported (`sectionForVideo`), otherwise the UI errors instead
+  of importing the wrong VOD's clips. Imported clips are clamped to the
+  video duration in `page.tsx:importClips`.
 - Jobs are polled every 1s; the video list is loaded once.
 
 ## Gotchas
@@ -142,8 +149,8 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 55 unit tests over the pure libs (times, bitrate, ladder,
-  names, crop, args).
+- `bun test` - 64 unit tests over the pure libs (times, bitrate,
+  ladder, names, crop, args, clipsTxt).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
