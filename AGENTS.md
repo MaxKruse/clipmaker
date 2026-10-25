@@ -134,7 +134,7 @@ Key invariants:
   the body in memory.
 - On Windows, never create `nul` files (reserved name); redirect command
   output to real temp files.
-- The dev server runs natively on :8080 (not Docker) because it needs
+- The dev server runs natively on :10100 (not Docker) because it needs
   local video paths and the local NVENC GPU. Long-lived processes must
   be killed by PID, never by image name.
 

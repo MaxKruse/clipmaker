@@ -23,7 +23,7 @@ bun install
 bun run dev
 ```
 
-Then open **http://localhost:8080**.
+Then open **http://localhost:10100**.
 
 For a production build: `bun run build && bun run start` (same port).
 
