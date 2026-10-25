@@ -113,9 +113,11 @@ Key invariants:
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
-- The stage measures its frame with a ResizeObserver; the crop overlay
-  only renders while the frame is measured (`scale > 0`) and while a
-  crop exists or crop mode is on.
+- The stage measures its frame with a ResizeObserver. The crop overlay
+  covers the whole stage and is always active: every pointer event on
+  the video crops (click = plant, drag = draw, move, 8 resize handles);
+  clicking the video never toggles playback. Letterbox clicks clamp to
+  the frame in `normalizeCrop`.
 - Jobs are polled every 1s; the video list is loaded once.
 
 ## Gotchas
