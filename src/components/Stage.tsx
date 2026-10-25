@@ -36,6 +36,8 @@ export function Stage(props: StageProps) {
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
+  const [vol, setVol] = useState(1);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -47,6 +49,15 @@ export function Stage(props: StageProps) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  // Volume/muted are video-element properties, not React attrs.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.volume = vol;
+  }, [vol, videoRef]);
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) v.muted = muted;
+  }, [muted, videoRef]);
 
   // Space play/pause, I/O set in/out, arrows seek (shift = one frame).
   useEffect(() => {
@@ -118,9 +129,26 @@ export function Stage(props: StageProps) {
         <button className="btn btn-sm" onClick={() => onSeek(time + 1 / fps)}>+1f</button>
         <button className="btn btn-sm" onClick={() => onIn(time)}>In (I)</button>
         <button className="btn btn-sm" onClick={() => onOut(time)}>Out (O)</button>
-        <span className="ml-auto font-mono text-xs text-muted">
-          {formatTime(time)} / {formatTime(duration)}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <button className="btn btn-sm" onClick={() => setMuted(!muted)}>
+            {muted ? "Unmute" : "Mute"}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={Math.round(vol * 100)}
+            onChange={(e) => {
+              setVol(Number(e.target.value) / 100);
+              setMuted(false);
+            }}
+            aria-label="Volume"
+            className="w-24 accent-accent"
+          />
+          <span className="font-mono text-xs text-muted">
+            {formatTime(time)} / {formatTime(duration)}
+          </span>
+        </div>
       </div>
     </div>
   );
