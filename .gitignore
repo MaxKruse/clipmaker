@@ -5,3 +5,5 @@ uploads/
 .tmp/
 *.log
 next-env.d.ts
+.data/
+tsconfig.tsbuildinfo
