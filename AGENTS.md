@@ -97,6 +97,9 @@ Key invariants:
   the upload dir only when `uploaded`).
 - `GET /api/videos/[id]/file` - byte-range streaming (206); the `<video>`
   element needs this for seeking.
+- `GET/PUT /api/videos/[id]/clips` - the video's project file: fetch
+  the persisted clip list, or replace it (every clip validated through
+  `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
   <=480px.
 - `POST /api/export` - `{videoId, clips}` - validates each clip server-
@@ -156,7 +159,10 @@ Key invariants:
   row. Leaving the preview also deselects the clip and clears its
   range (back to free playback). Playing, setting in/out, scrubbing,
   and switching/removing the video clear the pending return.
-- Jobs are polled every 1s; the video list is loaded once.
+- Jobs are polled every 1s; the video list is loaded once. Clips are
+  per-video project files: loaded for the active video, saved with a
+  500ms debounce, gated on the `clipsReady` ref (the active video's
+  load finished) so the initial empty record never clobbers disk.
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
@@ -179,8 +185,8 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 64 unit tests over the pure libs (times, bitrate,
-  ladder, names, crop, args, clipsTxt).
+- `bun test` - 72 unit tests over the pure libs (times, bitrate,
+  ladder, names, crop, args, clipsTxt, clips).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the

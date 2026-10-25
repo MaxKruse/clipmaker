@@ -36,6 +36,8 @@ export default function Page() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  // The active video's clips are loaded from disk (save guard).
+  const clipsReady = useRef<string | null>(null);
 
   const active = videos.find((v) => v.id === activeId) ?? null;
   const activeClips = active ? (clips[active.id] ?? []) : [];
@@ -63,6 +65,39 @@ export default function Page() {
     return () => clearInterval(poll);
   }, []);
 
+  // Load the active video's project file (its clips) on switch.
+  useEffect(() => {
+    if (!activeId) return;
+    const id = activeId;
+    let alive = true;
+    fetch(`/api/videos/${id}/clips`)
+      .then((r) => r.json())
+      .then((j: { clips: ClipSpec[] }) => {
+        if (!alive) return;
+        setClips((all) => ({ ...all, [id]: j.clips ?? [] }));
+        clipsReady.current = id;
+      })
+      .catch(() => {
+        if (alive) clipsReady.current = id;
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activeId]);
+
+  // Save the active video's clips, debounced after every change.
+  useEffect(() => {
+    if (!activeId || clipsReady.current !== activeId) return;
+    const h = setTimeout(() => {
+      fetch(`/api/videos/${activeId}/clips`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clips: clips[activeId] ?? [] }),
+      }).catch(() => {});
+    }, 500);
+    return () => clearTimeout(h);
+  }, [clips, activeId]);
+
   const selectVideo = (id: string, v?: VideoInfo) => {
     const video = v ?? videos.find((x) => x.id === id);
     if (!video) return;
@@ -85,6 +120,11 @@ export default function Page() {
     const v = videos.find((x) => x.id === id);
     if (v?.uploaded && !confirm(`Delete the uploaded file "${v.name}" from disk?`)) return;
     fetch(`/api/videos/${id}`, { method: "DELETE" }).catch(() => {});
+    setClips((all) => {
+      const next = { ...all };
+      delete next[id];
+      return next;
+    });
     const rest = videos.filter((x) => x.id !== id);
     setVideos(rest);
     if (activeId === id) {
@@ -92,11 +132,6 @@ export default function Page() {
       else {
         setActiveId(null);
         setReturnTo(null);
-        setClips((all) => {
-          const next = { ...all };
-          delete next[id];
-          return next;
-        });
       }
     }
   };

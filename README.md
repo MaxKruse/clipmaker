@@ -6,8 +6,10 @@ the frame, mute the audio, pick a quality and frame rate, and export each
 clip as an MP4 and/or a GIF.
 
 Everything runs on your machine: the video files never leave it, and
-exports are encoded with your local `ffmpeg` (NVENC GPU encoding is used
-automatically when available).
+exports are encoded with your local `ffmpeg` (NVENC GPU encoding is
+used automatically when available). Your clip lists are saved per
+video as project files (`.data/clips.json`) and survive reloads and
+restarts.
 
 ## How to run
 

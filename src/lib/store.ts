@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
-import type { Job, VideoInfo } from "./types";
+import type { ClipSpec, Job, VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
 const DATA_DIR = path.join(process.cwd(), ".data");
 const VIDEOS_FILE = path.join(DATA_DIR, "videos.json");
 const JOBS_FILE = path.join(DATA_DIR, "jobs.json");
+const CLIPS_FILE = path.join(DATA_DIR, "clips.json");
 
 export const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 export const OUT_DIR = path.join(process.cwd(), "out");
@@ -14,10 +15,12 @@ export const TMP_DIR = path.join(process.cwd(), ".tmp");
 class Store {
   videos = new Map<string, VideoInfo>();
   jobs = new Map<string, Job>();
+  clips = new Map<string, ClipSpec[]>();
 
   constructor() {
     this.loadVideos();
     this.loadJobs();
+    this.loadClips();
   }
 
   private loadVideos() {
@@ -60,8 +63,10 @@ class Store {
   removeVideo(id: string) {
     const v = this.videos.get(id);
     this.videos.delete(id);
+    this.clips.delete(id);
     if (v?.uploaded) fs.rmSync(path.dirname(v.path), { recursive: true, force: true });
     this.saveVideos();
+    this.saveClips();
   }
 
   addJob(j: Job) {
@@ -95,6 +100,31 @@ class Store {
   private saveJobs() {
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(JOBS_FILE, JSON.stringify([...this.jobs.values()], null, 2));
+  }
+  private loadClips() {
+    let raw: Record<string, ClipSpec[]>;
+    try {
+      raw = JSON.parse(fs.readFileSync(CLIPS_FILE, "utf8"));
+    } catch {
+      return;
+    }
+    for (const [id, list] of Object.entries(raw)) {
+      if (Array.isArray(list)) this.clips.set(id, list.filter((c) => c && typeof c.id === "string"));
+    }
+  }
+
+  private saveClips() {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(CLIPS_FILE, JSON.stringify(Object.fromEntries(this.clips), null, 2));
+  }
+
+  getClips(videoId: string): ClipSpec[] {
+    return this.clips.get(videoId) ?? [];
+  }
+
+  setClips(videoId: string, list: ClipSpec[]) {
+    this.clips.set(videoId, list);
+    this.saveClips();
   }
 }
 
