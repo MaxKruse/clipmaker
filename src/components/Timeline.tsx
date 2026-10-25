@@ -58,6 +58,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
 
   return (
     <div
+      data-player
       ref={rootRef}
       className="relative h-12 touch-none select-none overflow-hidden rounded-md bg-track"
       onPointerDown={onDown}

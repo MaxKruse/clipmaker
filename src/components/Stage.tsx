@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import type { CropBox } from "@/lib/crop";
-import { formatTime } from "@/lib/times";
+import { formatShort, formatTime } from "@/lib/times";
 import { CropOverlay, type Aspect } from "./CropOverlay";
 
 interface StageProps {
@@ -25,6 +25,10 @@ interface StageProps {
   onIn: (t: number) => void;
   onOut: (t: number) => void;
   onCropChange: (c: CropBox | null) => void;
+  /** Position to return to when leaving the clip preview, if any. */
+  returnTo: number | null;
+  /** Leave the clip preview and restore the previous position. */
+  onBack: () => void;
 }
 
 /** The video player with transport row and the crop overlay. */
@@ -33,6 +37,7 @@ export function Stage(props: StageProps) {
     src, srcW, srcH, videoRef, time, playing, duration, fps,
     crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
+    returnTo, onBack,
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -78,11 +83,13 @@ export function Stage(props: StageProps) {
         e.preventDefault();
         const dir = e.key === "ArrowLeft" ? -1 : 1;
         onSeek(v.currentTime + dir * (e.shiftKey ? frame : 1));
+      } else if (e.key === "Escape") {
+        onBack();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fps, videoRef, onTogglePlay, onIn, onOut, onSeek]);
+  }, [fps, videoRef, onTogglePlay, onIn, onOut, onSeek, onBack]);
 
   // Letterbox: the video frame rect inside the 16:9 stage container.
   const scale = box.w > 0 && box.h > 0 ? Math.min(box.w / srcW, box.h / srcH) : 0;
@@ -94,7 +101,7 @@ export function Stage(props: StageProps) {
   };
 
   return (
-    <div className="panel p-2">
+    <div data-player className="panel p-2">
       <div
         ref={boxRef}
         className="relative w-full overflow-hidden rounded-md bg-black"
@@ -148,6 +155,15 @@ export function Stage(props: StageProps) {
           <span className="font-mono text-xs text-muted">
             {formatTime(time)} / {formatTime(duration)}
           </span>
+          {returnTo !== null && (
+            <button
+              className="btn btn-sm"
+              onClick={onBack}
+              title="Back to the position before the clip preview (Esc)"
+            >
+              &#8598; {formatShort(returnTo)}
+            </button>
+          )}
         </div>
       </div>
     </div>

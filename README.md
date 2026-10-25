@@ -53,8 +53,12 @@ For a production build: `bun run build && bun run start` (same port).
    the MP4 and GIF appear in the EXPORTS panel. Files are also written to
    `out/<video-id>/` on disk.
 
+Clicking a clip in the list jumps the player to that clip's start as a
+preview; click on empty space, press `Esc`, or use the back button in
+the transport row to return to where you were.
+
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
-`shift` + `left`/`right` = one frame.
+`shift` + `left`/`right` = one frame, `esc` back from a clip preview.
 
 ## Clips from a notes file
 

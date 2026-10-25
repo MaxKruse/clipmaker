@@ -18,7 +18,7 @@ export function ClipQueue({
   clips, selectedId, exporting, exportError, onAdd, onSelect, onDelete, onExport,
 }: Props) {
   return (
-    <div className="panel p-3">
+    <div data-clips-panel className="panel p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="label">Clips ({clips.length})</span>
         <button className="btn btn-sm" onClick={onAdd}>

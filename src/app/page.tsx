@@ -26,6 +26,9 @@ export default function Page() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // Position before a clip-preview jump; restored by clicking inert
+  // background, Esc, or the Back button in the transport row.
+  const [returnTo, setReturnTo] = useState<number | null>(null);
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -66,6 +69,7 @@ export default function Page() {
     setTime(0);
     setExportError(null);
     setDraft(freshDraft(video));
+    setReturnTo(null);
   };
 
   const onAdded = (v: VideoInfo) => {
@@ -83,6 +87,7 @@ export default function Page() {
       if (rest[0]) selectVideo(rest[0].id);
       else {
         setActiveId(null);
+        setReturnTo(null);
         setClips((all) => {
           const next = { ...all };
           delete next[id];
@@ -102,8 +107,13 @@ export default function Page() {
   const togglePlay = (p: boolean) => {
     const v = videoRef.current;
     if (!v) return;
-    if (p) void v.play();
-    else v.pause();
+    if (p) {
+      // Playing accepts the preview position as the new one.
+      setReturnTo(null);
+      void v.play();
+    } else {
+      v.pause();
+    }
   };
 
   // Loop the selection while playing.
@@ -126,11 +136,13 @@ export default function Page() {
   };
 
   const setIn = (t: number) => {
+    setReturnTo(null);
     seek(t);
     updateDraft({ start: Math.max(0, Math.min(t, draft.end - 0.2)) });
   };
 
   const setOut = (t: number) => {
+    setReturnTo(null);
     seek(t);
     updateDraft({ end: Math.min(active?.duration ?? t, Math.max(t, draft.start + 0.2)) });
   };
@@ -146,7 +158,39 @@ export default function Page() {
       gif: { ...c.gif },
       crop: c.crop ? { ...c.crop } : null,
     });
+    // Jump to the clip's start for a preview; remember where we were
+    // before the first jump so "back" can restore it.
+    if (returnTo === null) setReturnTo(videoRef.current?.currentTime ?? time);
+    seek(c.start);
   };
+
+  const goBack = () => {
+    if (returnTo === null) return;
+    const v = videoRef.current;
+    if (v) v.currentTime = returnTo;
+    setReturnTo(null);
+  };
+
+  // A click on inert background cancels the preview and restores the
+  // previous position. Clicks on the clips list, the player (stage +
+  // timeline), and any control count as "doing something else".
+  useEffect(() => {
+    if (returnTo === null) return;
+    const t0 = returnTo;
+    const onDocClick = (e: MouseEvent) => {
+      const el = e.target;
+      if (
+        el instanceof Element &&
+        el.closest("[data-clips-panel], [data-player], button, input, a, select, textarea")
+      )
+        return;
+      const v = videoRef.current;
+      if (v) v.currentTime = t0;
+      setReturnTo(null);
+    };
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [returnTo]);
 
   const addClip = () => {
     if (!activeId) return;
@@ -219,7 +263,7 @@ export default function Page() {
         <h1 className="text-lg font-semibold tracking-tight">clipmaker</h1>
         <span className="chip">local video clip editor</span>
         <span className="ml-auto font-mono text-[11px] text-muted">
-          space play/pause &middot; I/O in-out &middot; arrows seek &middot; shift+arrow = 1 frame
+          space play/pause &middot; I/O in-out &middot; arrows seek &middot; shift+arrow = 1 frame &middot; esc back
         </span>
       </header>
 
@@ -256,13 +300,18 @@ export default function Page() {
               onIn={setIn}
               onOut={setOut}
               onCropChange={(c) => updateDraft({ crop: c })}
+              returnTo={returnTo}
+              onBack={goBack}
             />
             <Timeline
               duration={active.duration}
               time={time}
               inPoint={draft.start}
               outPoint={draft.end}
-              onScrub={seek}
+              onScrub={(t) => {
+                setReturnTo(null);
+                seek(t);
+              }}
               onIn={setIn}
               onOut={setOut}
               onMoveSel={(a, b) => updateDraft({ start: a, end: b })}

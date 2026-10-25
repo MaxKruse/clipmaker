@@ -125,6 +125,14 @@ Key invariants:
   name is imported (`sectionForVideo`), otherwise the UI errors instead
   of importing the wrong VOD's clips. Imported clips are clamped to the
   video duration in `page.tsx:importClips`.
+- **Clip preview jump**: clicking a clip in the queue seeks the player to
+  the clip's start and stores the pre-jump position (`returnTo` in
+  page.tsx, kept across consecutive clip clicks). Returning is by
+  clicking inert background (a document-level click listener ignores
+  `closest("[data-clips-panel], [data-player], button, input, a, select,
+  textarea)"), pressing `Esc`, or the back button in the Stage transport
+  row. Playing, setting in/out, scrubbing, and switching/removing the
+  video clear the pending return.
 - Jobs are polled every 1s; the video list is loaded once.
 
 ## Gotchas
