@@ -17,6 +17,8 @@ interface Props {
   onDraw: (a: number, b: number) => void;
   /** Right-click on the range: clear it. */
   onClearRange: () => void;
+  /** Flow step 1: pulse and hint that the times are set here. */
+  glow?: boolean;
 }
 
 type DragKind = "maybe" | "pan" | "draw" | "in" | "out" | "move";
@@ -33,7 +35,7 @@ const MIN_SPAN = 60;
  * the view, and a double-click fits the whole video. While dragging a
  * range near the track edge, the view auto-scrolls so the content can
  * be carried across the whole video. */
-export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange }: Props) {
+export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange, glow }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ kind: DragKind; startT: number; startX: number; origIn: number; origOut: number; viewStart: number; viewSpan: number } | null>(null);
   const panPos = useRef(0);
@@ -202,11 +204,14 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
         if ((e.target as HTMLElement).closest("button, [data-tl]")) return;
         setView({ start: 0, end: duration });
       }}
-      className="relative h-12 cursor-crosshair touch-none select-none overflow-hidden rounded-md bg-track"
+      className={`${glow ? "attn " : ""}relative h-12 cursor-crosshair touch-none select-none overflow-hidden rounded-md bg-track`}
       onPointerDown={onDown}
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
     >
+      {glow && (
+        <span className="chip pointer-events-none absolute left-1 top-1 z-10">drag to set the times</span>
+      )}
       {inPoint != null && outPoint != null && (
         <>
           <div

@@ -57,8 +57,14 @@ For a production build: `bun run build && bun run start` (same port).
    on/off, frame rate (25/30/60), MP4 quality (matched to the source by
    default, or a manual bitrate), and for GIFs a size cap (10/25/48 MB)
    plus a maximum edge length (256-1024 px).
-5. **"Add clip"** commits the current settings as a clip; you can queue
-   several clips from one video and export them all at once.
+5. **"Add clip"** starts a clip: it is created right away (at the
+   playhead if you have not marked a range yet) and selected, and the
+   app guides you - the timeline glows so you can set the exact times,
+   then the player glows if you want a crop. Every change updates the
+   selected clip in place, and everything is saved automatically, so
+   your clips are there after a reload. Selecting an existing clip
+   edits it the same way. You can queue several clips from one video
+   and export them all at once.
 6. **Export** - jobs run one after another (GPU encoding keeps them fast,
    but only one runs at a time). When a job finishes, download links for
    the MP4 and GIF appear in the EXPORTS panel. Files are also written to

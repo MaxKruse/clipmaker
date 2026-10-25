@@ -32,6 +32,9 @@ export default function Page() {
   // The range is only "live" once the user sets it (timeline draw,
   // I/O keys, In/Out inputs). Without a range, playback is free.
   const [hasRange, setHasRange] = useState(false);
+  // Guided add-clip flow: 0 = idle, 1 = set the times (the timeline
+  // glows), 2 = optional crop (the player glows).
+  const [step, setStep] = useState<0 | 1 | 2>(0);
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -109,6 +112,7 @@ export default function Page() {
     setDraft(freshDraft(video));
     setReturnTo(null);
     setHasRange(false);
+    setStep(0);
   };
 
   const onAdded = (v: VideoInfo) => {
@@ -165,6 +169,10 @@ export default function Page() {
   };
 
   const updateDraft = (patch: Partial<ClipSpec>) => {
+    // Guided flow: touching the times finishes the "set the times"
+    // step; setting a crop finishes the optional crop step.
+    if (step === 1 && (patch.start !== undefined || patch.end !== undefined)) setStep(2);
+    if (step === 2 && patch.crop) setStep(0);
     setDraft((d) => ({ ...d, ...patch }));
     if (selectedId && activeId) {
       setClips((all) => ({
@@ -219,6 +227,7 @@ export default function Page() {
       crop: c.crop ? { ...c.crop } : null,
     });
     setHasRange(true);
+    setStep(0);
     // Jump to the clip's start for a preview; remember where we were
     // before the first jump so "back" can restore it.
     if (returnTo === null) setReturnTo(videoRef.current?.currentTime ?? time);
@@ -233,6 +242,7 @@ export default function Page() {
     setReturnTo(null);
     setSelectedId(null);
     setHasRange(false);
+    setStep(0);
     if (active) setDraft(freshDraft(active));
   };
 
@@ -254,8 +264,12 @@ export default function Page() {
     return () => document.removeEventListener("click", onDocClick);
   }, [returnTo]);
 
+  // Start the add-clip flow: the clip is created immediately - at the
+  // live range if there is one, otherwise as a short window at the
+  // playhead - and selected, so every following change (times, crop,
+  // options) edits it in place and saves automatically.
   const addClip = () => {
-    if (!activeId || !hasRange) return;
+    if (!activeId || !active) return;
     const c: ClipSpec = {
       ...draft,
       id: newId(),
@@ -264,8 +278,15 @@ export default function Page() {
       gif: { ...draft.gif },
       crop: draft.crop ? { ...draft.crop } : null,
     };
+    if (!hasRange) {
+      c.start = Math.max(0, Math.min(time, active.duration - 0.2));
+      c.end = Math.min(active.duration, c.start + 5);
+    }
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), c] }));
+    setDraft({ ...c, formats: [...c.formats], quality: { ...c.quality }, gif: { ...c.gif }, crop: c.crop ? { ...c.crop } : null });
     setSelectedId(c.id);
+    setHasRange(true);
+    setStep(hasRange ? 2 : 1);
   };
 
   // Add parsed clip ranges (from a Clips .txt) to the active video,
@@ -281,6 +302,7 @@ export default function Page() {
       .filter((c) => c.start < active.duration && c.end - c.start > 0.2);
     if (!list.length) return;
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), ...list] }));
+    setStep(0);
   };
 
   const deleteClip = (id: string) => {
@@ -292,6 +314,7 @@ export default function Page() {
       else {
         setSelectedId(null);
         setHasRange(false);
+        setStep(0);
       }
     }
   };
@@ -364,6 +387,7 @@ export default function Page() {
               onCropChange={(c) => updateDraft({ crop: c })}
               returnTo={returnTo}
               onBack={leavePreview}
+              glow={step === 2}
             />
             <Timeline
               duration={active.duration}
@@ -379,6 +403,7 @@ export default function Page() {
               onMoveSel={(a, b) => updateDraft({ start: a, end: b })}
               onDraw={onDraw}
               onClearRange={clearRange}
+              glow={step === 1}
             />
             <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
           </div>
@@ -396,7 +421,7 @@ export default function Page() {
               clips={activeClips}
               selectedId={selectedId}
               exporting={exporting}
-              canAdd={hasRange}
+              attnAdd={selectedId === null}
               exportError={exportError}
               onAdd={addClip}
               onSelect={selectClip}

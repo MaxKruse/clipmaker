@@ -112,13 +112,22 @@ Key invariants:
 
 - `page.tsx` owns all state; components are presentational. The
   **draft model**: a single working `ClipSpec` that mirrors the selected
-  committed clip (`updateDraft` writes to both). "Add clip" commits a
-  copy with a fresh id; selecting a clip loads it into the draft. The
-  **in/out range is optional** (`hasRange` in page.tsx): a fresh video
-  starts with none, so playback is free. A range becomes live via a
-  timeline drag, I/O, the In/Out inputs, or selecting a clip. "Add
-  clip" requires a live range; playback loops the range only while one
-  is live.
+  committed clip (`updateDraft` writes to both); selecting a clip loads
+  it into the draft, so every draft change edits the clip in place.
+  The **in/out range is optional** (`hasRange` in page.tsx): a fresh
+  video starts with none, so playback is free. A range becomes live via
+  a timeline drag, I/O, the In/Out inputs, adding a clip, or selecting
+  one. Playback loops the range only while one is live.
+- **Add-clip flow** (guided; `step` state in page.tsx: 0 idle, 1 set
+  times, 2 crop): "Add clip" is always enabled and glows (`.attn`)
+  while no clip is selected. It creates the clip immediately - at the
+  live range if there is one, otherwise a 5s window at the playhead -
+  and selects it. Step 1 glows the Timeline with a hint chip; step 2
+  glows the Stage. `updateDraft` advances the flow: a patch touching
+  start/end goes 1 -> 2, a crop patch goes 2 -> 0. Esc/inert click/back,
+  selecting another clip, video switch, import, and delete reset to 0.
+  `.attn` is plain (unlayered) CSS in globals.css so it overrides the
+  layered component border colors.
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.

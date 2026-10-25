@@ -29,6 +29,8 @@ interface StageProps {
   returnTo: number | null;
   /** Leave the clip preview and restore the previous position. */
   onBack: () => void;
+  /** Flow step 2: pulse and hint that the optional crop is drawn here. */
+  glow?: boolean;
 }
 
 /** The video player with transport row and the crop overlay. */
@@ -38,6 +40,7 @@ export function Stage(props: StageProps) {
     crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
     returnTo, onBack,
+    glow,
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -111,12 +114,17 @@ export function Stage(props: StageProps) {
   };
 
   return (
-    <div data-player className="panel p-2">
+    <div data-player className={`panel relative p-2 ${glow ? "attn" : ""}`}>
       <div
         ref={boxRef}
         className="relative w-full overflow-hidden rounded-md bg-black"
         style={{ aspectRatio: "16 / 9" }}
       >
+        {glow && (
+          <span className="chip pointer-events-none absolute left-2 top-2 z-10">
+            drag on the video to crop (optional)
+          </span>
+        )}
         <video
           ref={videoRef}
           src={src}
