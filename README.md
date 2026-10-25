@@ -31,11 +31,8 @@ For a production build: `bun run build && bun run start` (same port).
 
 1. **Load a video** - either type a local file path (recommended for big
    files: it is used in place, never copied) or upload a file (copied
-   into `uploads/`). Once a video is active you can also **import clip
-   ranges from a notes file** via "Clips (.txt)": lines like
-   `14:47 - 15:22 Cute` (also `1:02:03`-style times) each become a clip;
-   `# <video name>` header lines split the file into per-VOD sections,
-   and only the section whose name matches the active video is imported.
+   into `uploads/`). To import a batch of clips from a notes file in
+   one go, see [Clips from a notes file](#clips-from-a-notes-file).
 2. **Pick a range** - scrub with the timeline, the arrow keys, or click
    around the player, then press `I` (in) and `O` (out). Space toggles
    playback; `Shift` + arrow seeks one frame.
@@ -58,6 +55,36 @@ For a production build: `bun run build && bun run start` (same port).
 
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
 `shift` + `left`/`right` = one frame.
+
+## Clips from a notes file
+
+If you keep notes about what to clip, you can import them in one go:
+
+1. Load the video the notes are about and keep it active.
+2. In the video loader, click **"Clips (.txt)"** and pick your notes
+   file.
+
+File format - one clip per line:
+
+```txt
+# my-vod-2026-10-21.mp4
+14:47 - 15:22 Funny
+20:42 - 20:58 Cute Cat
+
+1:01:41 - 1:02:54 Cat falls off the couch
+```
+
+- Times are `m:ss` or `h:mm:ss` (plain seconds also work).
+- The text after the end time becomes the clip's note (optional).
+- A `# header` line starts a section for a different video. When a file
+  has several sections, only the one whose header contains the active
+  video's file name is imported; when none matches, nothing is imported
+  and the mismatch is reported instead.
+- Blank lines are ignored and unparseable lines are skipped. Ranges are
+  clamped to the video's length.
+
+Imported clips get the default settings (MP4 + GIF, audio on, 30 fps)
+and can be adjusted individually in the queue before export.
 
 ## Limitations
 
