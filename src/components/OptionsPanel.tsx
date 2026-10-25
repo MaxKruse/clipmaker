@@ -73,7 +73,7 @@ export function OptionsPanel({
       : "chip cursor-pointer hover:border-accent/40";
 
   return (
-    <div className="panel flex flex-col gap-3 p-3">
+    <div data-clip-options className="panel flex flex-col gap-3 p-3">
       <span className="label">Clip options</span>
 
       <div className="flex flex-col gap-1.5">

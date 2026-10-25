@@ -163,7 +163,7 @@ Key invariants:
   the clip's start and stores the pre-jump position (`returnTo` in
   page.tsx, kept across consecutive clip clicks). Returning is by
   clicking inert background (a document-level click listener ignores
-  `closest("[data-clips-panel], [data-player], button, input, a, select,
+  `closest("[data-clips-panel], [data-clip-options], [data-player],
   textarea)"), pressing `Esc`, or the back button in the Stage transport
   row. Leaving the preview also deselects the clip and clears its
   range (back to free playback). Playing, setting in/out, scrubbing,

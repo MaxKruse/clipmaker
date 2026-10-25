@@ -255,7 +255,7 @@ export default function Page() {
       const el = e.target;
       if (
         el instanceof Element &&
-        el.closest("[data-clips-panel], [data-player], button, input, a, select, textarea")
+        el.closest("[data-clips-panel], [data-clip-options], [data-player], button, input, a, select, textarea")
       )
         return;
       leavePreview();
