@@ -1,0 +1,7 @@
+node_modules/
+.next/
+out/
+uploads/
+.tmp/
+*.log
+next-env.d.ts
