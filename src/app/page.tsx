@@ -25,7 +25,6 @@ export default function Page() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [cropMode, setCropMode] = useState(false);
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -62,7 +61,6 @@ export default function Page() {
     if (!video) return;
     setActiveId(id);
     setSelectedId(null);
-    setCropMode(false);
     setPlaying(false);
     setTime(0);
     setExportError(null);
@@ -147,7 +145,6 @@ export default function Page() {
       gif: { ...c.gif },
       crop: c.crop ? { ...c.crop } : null,
     });
-    setCropMode(Boolean(c.crop));
   };
 
   const addClip = () => {
@@ -233,7 +230,6 @@ export default function Page() {
               inPoint={draft.start}
               outPoint={draft.end}
               crop={draft.crop}
-              cropMode={cropMode}
               aspect={aspect}
               onTogglePlay={togglePlay}
               onPlayingChange={setPlaying}
@@ -259,19 +255,10 @@ export default function Page() {
             <OptionsPanel
               video={active}
               draft={draft}
-              cropMode={cropMode}
               aspect={aspect}
               onChange={updateDraft}
-              onToggleCropMode={() => {
-                const next = !cropMode;
-                setCropMode(next);
-                if (next && playing) togglePlay(false);
-              }}
               onAspect={setAspect}
-              onClearCrop={() => {
-                setCropMode(false);
-                updateDraft({ crop: null });
-              }}
+              onClearCrop={() => updateDraft({ crop: null })}
             />
             <ClipQueue
               clips={activeClips}

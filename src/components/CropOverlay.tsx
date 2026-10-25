@@ -32,7 +32,6 @@ interface Props {
   srcW: number;
   srcH: number;
   crop: CropBox | null;
-  mode: boolean;
   aspect: Aspect;
   onChange: (c: CropBox | null) => void;
 }
@@ -41,11 +40,10 @@ interface Props {
  * Crop editor drawn over the video frame. The crop is stored in source
  * pixels (what ffmpeg receives); all geometry here converts to/from px.
  */
-export function CropOverlay({ frame, srcW, srcH, crop, mode, aspect, onChange }: Props) {
+export function CropOverlay({ frame, srcW, srcH, crop, aspect, onChange }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ kind: DragKind; sx: number; sy: number; prev: CropBox | null } | null>(null);
 
-  if (!crop && !mode) return null;
   const s = frame.w / srcW; // container px per source px
 
   const toSrc = (e: React.PointerEvent) => {
@@ -57,7 +55,6 @@ export function CropOverlay({ frame, srcW, srcH, crop, mode, aspect, onChange }:
     Boolean(c) && p.x >= c!.x && p.x <= c!.x + c!.w && p.y >= c!.y && p.y <= c!.y + c!.h;
 
   const onDown = (e: React.PointerEvent) => {
-    if (!mode) return;
     e.preventDefault();
     const h = (e.target as HTMLElement).dataset?.handle as Handle | undefined;
     const p = toSrc(e);
@@ -138,14 +135,7 @@ export function CropOverlay({ frame, srcW, srcH, crop, mode, aspect, onChange }:
   return (
     <div
       ref={rootRef}
-      className="absolute z-10 touch-none select-none"
-      style={{
-        left: frame.x,
-        top: frame.y,
-        width: frame.w,
-        height: frame.h,
-        cursor: mode ? "crosshair" : "default",
-      }}
+      className="absolute inset-0 z-10 cursor-crosshair touch-none select-none"
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
@@ -160,18 +150,17 @@ export function CropOverlay({ frame, srcW, srcH, crop, mode, aspect, onChange }:
             height: cs(crop.h),
             boxShadow: "0 0 0 9999px rgba(0,0,0,0.55)",
             outline: "1px solid var(--color-accent)",
-            cursor: mode ? "move" : "default",
+            cursor: "move",
           }}
         >
-          {mode &&
-            HANDLES.map((h) => (
-              <div
-                key={h.id}
-                data-handle={h.id}
-                className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-black/40 bg-accent"
-                style={{ left: h.x, top: h.y, cursor: h.cursor }}
-              />
-            ))}
+          {HANDLES.map((h) => (
+            <div
+              key={h.id}
+              data-handle={h.id}
+              className="absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-[2px] border border-black/40 bg-accent"
+              style={{ left: h.x, top: h.y, cursor: h.cursor }}
+            />
+          ))}
         </div>
       )}
     </div>

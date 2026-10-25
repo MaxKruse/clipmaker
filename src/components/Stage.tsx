@@ -17,7 +17,6 @@ interface StageProps {
   inPoint: number;
   outPoint: number;
   crop: CropBox | null;
-  cropMode: boolean;
   aspect: Aspect;
   onTogglePlay: (p: boolean) => void;
   onPlayingChange: (p: boolean) => void;
@@ -32,7 +31,7 @@ interface StageProps {
 export function Stage(props: StageProps) {
   const {
     src, srcW, srcH, videoRef, time, playing, duration, fps,
-    crop, cropMode, aspect,
+    crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -95,12 +94,6 @@ export function Stage(props: StageProps) {
           src={src}
           preload="metadata"
           playsInline
-          onClick={(e) => {
-            if (cropMode) return;
-            const el = e.currentTarget;
-            if (el.paused) onTogglePlay(true);
-            else onTogglePlay(false);
-          }}
           onPlay={() => onPlayingChange(true)}
           onPause={() => onPlayingChange(false)}
           onTimeUpdate={(e) => onTime(e.currentTarget.currentTime)}
@@ -112,7 +105,6 @@ export function Stage(props: StageProps) {
             srcW={srcW}
             srcH={srcH}
             crop={crop}
-            mode={cropMode}
             aspect={aspect}
             onChange={onCropChange}
           />

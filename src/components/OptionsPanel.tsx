@@ -47,16 +47,14 @@ function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) =
 interface Props {
   video: VideoInfo;
   draft: ClipSpec;
-  cropMode: boolean;
   aspect: Aspect;
   onChange: (patch: Partial<ClipSpec>) => void;
-  onToggleCropMode: () => void;
   onAspect: (a: Aspect) => void;
   onClearCrop: () => void;
 }
 
 export function OptionsPanel({
-  video, draft, cropMode, aspect, onChange, onToggleCropMode, onAspect, onClearCrop,
+  video, draft, aspect, onChange, onAspect, onClearCrop,
 }: Props) {
   const toggleFormat = (f: Format) => {
     const has = draft.formats.includes(f);
@@ -191,9 +189,6 @@ export function OptionsPanel({
       <div className="flex flex-col gap-1.5">
         <span className="label">Crop</span>
         <div className="flex flex-wrap items-center gap-2">
-          <button className={cropMode ? "btn btn-sm btn-primary" : "btn btn-sm"} onClick={onToggleCropMode}>
-            {cropMode ? "Cropping" : "Draw crop"}
-          </button>
           <select className="input" value={aspect} onChange={(e) => onAspect(e.target.value as Aspect)}>
             <option value="free">free</option>
             <option value="16:9">16:9</option>
