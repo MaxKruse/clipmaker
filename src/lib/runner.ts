@@ -14,12 +14,13 @@ import { clipFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import type { Job, VideoInfo } from "./types";
 
-// One ffmpeg job at a time: encodes are heavy and a queue keeps progress
-// reporting and disk usage predictable.
+// Bounded pool: up to CONCURRENCY exports run at once. NVENC handles
+// several concurrent GPU encodes, and on a CPU-only box parallel jobs
+// only saturate the cores a serial run would have used anyway.
+const CONCURRENCY = Math.max(1, Number(process.env.CLIPMAKER_CONCURRENCY) || 2);
 const queue: Job[] = [];
-let pumping = false;
+const running = new Set<Job>();
 let encoderPromise: Promise<Mp4Encoder> | null = null;
-let lastSave = 0;
 
 export function pickEncoder(): Promise<Mp4Encoder> {
   encoderPromise ??= nvencAvailable().then((ok) => (ok ? "h264_nvenc" : "libx264"));
@@ -32,41 +33,44 @@ export function enqueue(job: Job) {
   void pump();
 }
 
-async function pump() {
-  if (pumping) return;
-  pumping = true;
-  try {
-    while (queue.length > 0) {
-      const job = queue.shift()!;
-      try {
-        job.status = "running";
-        job.pct = 0;
-        job.stage = "starting";
-        store.updateJob(job);
-        await runJob(job);
-        job.status = "done";
-        job.pct = 1;
-      } catch (e) {
-        job.status = "error";
-        job.error = e instanceof Error ? e.message : String(e);
-      } finally {
-        if (job.status !== "error") job.stage = null;
-        store.updateJob(job);
-        fs.rmSync(path.join(TMP_DIR, job.id), { recursive: true, force: true });
-      }
-    }
-  } finally {
-    pumping = false;
+function pump() {
+  while (queue.length > 0 && running.size < CONCURRENCY) {
+    const job = queue.shift()!;
+    running.add(job);
+    void startJob(job).finally(() => {
+      running.delete(job);
+      pump();
+    });
   }
 }
 
-/** Progress sink that persists at most twice per second. */
+async function startJob(job: Job) {
+  try {
+    job.status = "running";
+    job.pct = 0;
+    job.stage = "starting";
+    store.updateJob(job);
+    await runJob(job);
+    job.status = "done";
+    job.pct = 1;
+  } catch (e) {
+    job.status = "error";
+    job.error = e instanceof Error ? e.message : String(e);
+  } finally {
+    if (job.status !== "error") job.stage = null;
+    store.updateJob(job);
+    fs.rmSync(path.join(TMP_DIR, job.id), { recursive: true, force: true });
+  }
+}
+
+/** Per-job progress sink that persists at most twice per second. */
 function makePctSink(job: Job) {
+  let last = 0;
   return (pct: number) => {
     job.pct = pct;
     const now = Date.now();
-    if (now - lastSave > 500) {
-      lastSave = now;
+    if (now - last > 500) {
+      last = now;
       store.updateJob(job);
     }
   };

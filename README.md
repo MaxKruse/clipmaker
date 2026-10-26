@@ -88,8 +88,8 @@ For a production build: `bun run build && bun run start` (same port).
    your clips are there after a reload. Selecting an existing clip
    edits it the same way. You can queue several clips from one video
    and export them all at once.
-6. **Export** - jobs run one after another (GPU encoding keeps them fast,
-   but only one runs at a time). When a job finishes, download links for
+6. **Export** - several jobs run in parallel (two at a time by default,
+   raise it with the CLIPMAKER_CONCURRENCY env var). When a job finishes,
    the MP4 and GIF appear in the EXPORTS panel. Files are also written to
    `out/<video-id>/` on disk.
 
@@ -135,7 +135,8 @@ and can be adjusted individually in the queue before export.
 
 ## Limitations
 
-- One export job at a time (jobs queue in order).
+- Exports run a few at a time (two in parallel by default); the rest
+  queue in order.
 - Exports are always re-encoded (no stream-copy), so even "source"
   quality takes a moment; NVENC makes this fast on supported GPUs.
 - Uploaded files are copied into `uploads/`; for very large files prefer

@@ -28,7 +28,7 @@ src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
 src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
-src/lib/runner.ts   sequential export job queue (the only ffmpeg caller)
+src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller)
 src/app/api/**      thin route handlers over store/runner
 src/components/**   UI, all "use client"
 src/app/page.tsx    page state owner (videos, clips, draft, jobs polling)
