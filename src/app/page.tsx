@@ -346,7 +346,11 @@ export default function Page() {
   };
 
   const clearFinished = () => {
-    fetch("/api/jobs", { method: "DELETE" }).then((r) => r.json()).then(setJobs).catch(() => {});
+    fetch("/api/jobs", { method: "DELETE" })
+      .then(() => fetch("/api/jobs"))
+      .then((r) => r.json())
+      .then(setJobs)
+      .catch(() => {});
   };
 
   return (
