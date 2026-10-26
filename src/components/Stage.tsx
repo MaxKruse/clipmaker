@@ -114,11 +114,10 @@ export function Stage(props: StageProps) {
   };
 
   return (
-    <div data-player className={`panel relative p-2 ${glow ? "attn" : ""}`}>
+    <div data-player className={`relative flex flex-1 flex-col p-2 ${glow ? "attn" : ""}`}>
       <div
         ref={boxRef}
-        className="relative w-full overflow-hidden rounded-md bg-black"
-        style={{ aspectRatio: "16 / 9" }}
+        className="relative aspect-video w-full flex-1 overflow-hidden rounded-md bg-black xl:aspect-auto xl:min-h-0"
       >
         {glow && (
           <span className="chip pointer-events-none absolute left-2 top-2 z-10">

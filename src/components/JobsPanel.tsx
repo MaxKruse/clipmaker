@@ -14,7 +14,7 @@ export function JobsPanel({ jobs, onClear }: { jobs: Job[]; onClear: () => void 
   if (jobs.length === 0) return null;
   const hasFinished = jobs.some((j) => j.status === "done" || j.status === "error");
   return (
-    <div className="panel p-3">
+    <div className="panel shrink-0 p-3 xl:max-h-[40%] xl:overflow-y-auto">
       <div className="mb-2 flex items-center justify-between">
         <span className="label">Exports</span>
         {hasFinished && (

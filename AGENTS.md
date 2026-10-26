@@ -176,6 +176,11 @@ Key invariants:
   per-video project files: loaded for the active video, saved with a
   500ms debounce, gated on the `clipsReady` ref (the active video's
   load finished) so the initial empty record never clobbers disk.
+- Layout: at `xl` and up the app fits the viewport (root `h-screen`, no
+  page scroll): the Stage video box stretches to fill the left column,
+  the clip list scrolls inside ClipQueue, and the exports panel is capped
+  at 40% of the sidebar with its own scroll. Below `xl` it falls back to
+  page scroll and a 16:9 video box.
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
