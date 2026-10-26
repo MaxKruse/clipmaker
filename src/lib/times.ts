@@ -33,3 +33,12 @@ export function formatShort(sec: number): string {
     ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}`
     : `${m}:${String(r).padStart(2, "0")}`;
 }
+
+/** Visible window that frames [start, end] with `pad` seconds of
+ * margin on each side, clamped to the video duration. */
+export function focusWindow(start: number, end: number, duration: number, pad: number) {
+  return {
+    start: Math.max(0, start - pad),
+    end: Math.min(duration, end + pad),
+  };
+}

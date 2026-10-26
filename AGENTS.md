@@ -16,7 +16,7 @@ frames, and download links.
 The code is layered so that everything testable is pure:
 
 ```
-src/lib/times.ts    time parsing/formatting ("0:01.5", "90s")
+src/lib/times.ts    time parsing/formatting + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
 src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
@@ -146,7 +146,7 @@ Key invariants:
   it (back to free playback). The selection region only renders while
   a range is live. The track shows a zoomable time window
   (`view` state in Timeline.tsx): wheel = zoom at the mouse position
-  (min span 60s, max span = whole video, default = whole video),
+  (min span 10s, max span = whole video, default = whole video),
   shift+wheel or shift+drag = scroll, double-click = fit. When zoomed,
   a range chip and a `fit` button overlay the top-right corner. While
   a range is being drawn/moved near a track edge, the view auto-pans
@@ -161,7 +161,11 @@ Key invariants:
   video duration in `page.tsx:importClips`.
 - **Clip preview jump**: clicking a clip in the queue seeks the player to
   the clip's start and stores the pre-jump position (`returnTo` in
-  page.tsx, kept across consecutive clip clicks). Returning is by
+  page.tsx, kept across consecutive clip clicks). The timeline also
+  frames the clip with 5s of margin on each side (`focus` prop,
+  `focusWindow` in times.ts) so the in/out points can be fine-tuned on
+  the track; the focus is cleared on leave/switch and the view itself
+  only resets via double-click/fit or a video switch. Returning is by
   clicking inert background (a document-level click listener ignores
   `closest("[data-clips-panel], [data-clip-options], [data-player],
   textarea)"), pressing `Esc`, or the back button in the Stage transport
@@ -194,7 +198,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 72 unit tests over the pure libs (times, bitrate,
+- `bun test` - 76 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;

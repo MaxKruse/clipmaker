@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatShort, formatTime, parseTime } from "../src/lib/times";
+import { focusWindow, formatShort, formatTime, parseTime } from "../src/lib/times";
 
 describe("parseTime", () => {
   test("parses plain seconds", () => {
@@ -57,5 +57,23 @@ describe("formatShort", () => {
 
   test("hours prefix", () => {
     expect(formatShort(3723)).toBe("1:02:03");
+  });
+});
+
+describe("focusWindow", () => {
+  test("pads the clip range on both sides", () => {
+    expect(focusWindow(100, 103, 600, 5)).toEqual({ start: 95, end: 108 });
+  });
+
+  test("clamps at the start of the video", () => {
+    expect(focusWindow(2, 8, 600, 5)).toEqual({ start: 0, end: 13 });
+  });
+
+  test("clamps at the end of the video", () => {
+    expect(focusWindow(590, 598, 600, 5)).toEqual({ start: 585, end: 600 });
+  });
+
+  test("shrinks to the video when the padded window exceeds it", () => {
+    expect(focusWindow(1, 2, 6, 5)).toEqual({ start: 0, end: 6 });
   });
 });

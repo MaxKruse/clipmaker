@@ -22,6 +22,9 @@ export default function Page() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, ClipSpec[]>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Clip range the timeline frames (±5s margin) for fine in/out
+  // adjustment; set on clip select, cleared on leave/switch.
+  const [focus, setFocus] = useState<{ start: number; end: number } | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
@@ -106,6 +109,7 @@ export default function Page() {
     if (!video) return;
     setActiveId(id);
     setSelectedId(null);
+    setFocus(null);
     setPlaying(false);
     setTime(0);
     setExportError(null);
@@ -227,6 +231,7 @@ export default function Page() {
       crop: c.crop ? { ...c.crop } : null,
     });
     setHasRange(true);
+    setFocus({ start: c.start, end: c.end });
     setStep(0);
     // Jump to the clip's start for a preview; remember where we were
     // before the first jump so "back" can restore it.
@@ -241,6 +246,7 @@ export default function Page() {
     if (returnTo !== null && v) v.currentTime = returnTo;
     setReturnTo(null);
     setSelectedId(null);
+    setFocus(null);
     setHasRange(false);
     setStep(0);
     if (active) setDraft(freshDraft(active));
@@ -313,6 +319,7 @@ export default function Page() {
       if (rest[0]) selectClip(rest[0].id);
       else {
         setSelectedId(null);
+        setFocus(null);
         setHasRange(false);
         setStep(0);
       }
@@ -404,6 +411,7 @@ export default function Page() {
               onDraw={onDraw}
               onClearRange={clearRange}
               glow={step === 1}
+              focus={focus}
             />
             <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
           </div>

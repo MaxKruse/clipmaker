@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatShort } from "@/lib/times";
+import { focusWindow, formatShort } from "@/lib/times";
 
 interface Props {
   duration: number;
@@ -19,6 +19,9 @@ interface Props {
   onClearRange: () => void;
   /** Flow step 1: pulse and hint that the times are set here. */
   glow?: boolean;
+  /** Clip range to frame when selected (padded on both sides), for
+   * fine in/out adjustment. */
+  focus?: { start: number; end: number } | null;
 }
 
 type DragKind = "maybe" | "pan" | "draw" | "in" | "out" | "move";
@@ -26,16 +29,18 @@ type DragKind = "maybe" | "pan" | "draw" | "in" | "out" | "move";
 /** px from the track edge that triggers auto-panning while dragging. */
 const PAN_MARGIN = 28;
 /** Max zoomed-in window, in seconds. */
-const MIN_SPAN = 60;
+const MIN_SPAN = 10;
+/** Seconds of margin shown on each side of a focused clip. */
+const FOCUS_PAD = 5;
 
 /** Scrub bar: click seeks, drag on the empty track draws the in/out
  * range, drag on the range moves it, edge handles resize it, a
- * right-click clears the range, the wheel zooms (60s at max zoom,
+ * right-click clears the range, the wheel zooms (10s at max zoom,
  * the whole video at max zoom-out), shift+wheel and shift+drag scroll
  * the view, and a double-click fits the whole video. While dragging a
  * range near the track edge, the view auto-scrolls so the content can
  * be carried across the whole video. */
-export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange, glow }: Props) {
+export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange, glow, focus }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ kind: DragKind; startT: number; startX: number; origIn: number; origOut: number; viewStart: number; viewSpan: number } | null>(null);
   const panPos = useRef(0);
@@ -51,6 +56,14 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
   useEffect(() => {
     setView({ start: 0, end: duration });
   }, [duration]);
+
+  // Frame a selected clip: the view zooms to it with FOCUS_PAD of
+  // margin on each side so its in/out points can be fine-tuned.
+  useEffect(() => {
+    if (!focus) return;
+    const w = focusWindow(focus.start, focus.end, duration, FOCUS_PAD);
+    if (w.end - w.start > 0.001) setView(w);
+  }, [focus, duration]);
 
   // Native wheel listener - React's onWheel is passive and cannot
   // preventDefault, which would let the page scroll while zooming.

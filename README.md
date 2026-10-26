@@ -63,7 +63,7 @@ For a production build: `bun run build && bun run start` (same port).
    `I` (in) and `O` (out) at the playhead. Without a range, playback
    runs free; with a range set, playback loops it so you can preview
    the clip. Space toggles playback; `Shift` + arrow seeks one frame.
-   Scroll on the timeline to zoom - 60 seconds at closest, the whole
+   Scroll on the timeline to zoom - 10 seconds at closest, the whole
    video at furthest; `Shift` + scroll or `Shift` + drag pans the
    view, and double-click (or the `fit` button) returns to the whole
    video. While dragging the range near a track edge, the view
@@ -94,8 +94,10 @@ For a production build: `bun run build && bun run start` (same port).
    `out/<video-id>/` on disk.
 
 Clicking a clip in the list jumps the player to that clip's start and
-selects it as a preview; click on empty space, press `Esc`, or use
-the back button in the transport row to return to where you were and
+selects it as a preview, and the timeline zooms in around the clip
+(5 seconds of margin on each side) so you can fine-tune its in/out
+points on the track. Click on empty space, press `Esc`, or use the
+back button in the transport row to return to where you were and
 deselect the clip.
 
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
