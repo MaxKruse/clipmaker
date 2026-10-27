@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { sortJobs } from "./jobs";
 import type { ClipSpec, Job, VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
@@ -87,7 +88,7 @@ class Store {
   }
 
   listJobs(): Job[] {
-    return [...this.jobs.values()].sort((a, b) => b.createdAt - a.createdAt);
+    return sortJobs([...this.jobs.values()]);
   }
 
   private saveVideos() {

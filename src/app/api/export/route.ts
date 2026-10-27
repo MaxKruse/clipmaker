@@ -12,6 +12,9 @@ export async function POST(req: NextRequest) {
     const rawClips = Array.isArray(body.clips) ? body.clips : [];
     if (rawClips.length === 0) return NextResponse.json({ error: "no clips" }, { status: 400 });
 
+    // One timestamp per request: a batch stays tied together so the
+    // export list renders it in clip order (stable sort on ties).
+    const batch = Date.now();
     const ids: string[] = [];
     for (let i = 0; i < rawClips.length; i++) {
       let clip: ClipSpec;
@@ -33,7 +36,7 @@ export async function POST(req: NextRequest) {
         stage: null,
         pct: 0,
         outputs: [],
-        createdAt: Date.now(),
+        createdAt: batch,
       };
       ids.push(job.id);
       enqueue(job);
