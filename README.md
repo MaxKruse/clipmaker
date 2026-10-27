@@ -91,7 +91,9 @@ For a production build: `bun run build && bun run start` (same port).
 6. **Export** - several jobs run in parallel (two at a time by default,
    raise it with the CLIPMAKER_CONCURRENCY env var). When a job finishes,
    the MP4 and GIF appear in the EXPORTS panel. Files are also written to
-   `out/<video-id>/` on disk.
+   `out/<video-id>/` on disk. In/out points keep their sub-second
+   precision (shown to the millisecond in the clip list and timeline),
+   and the exported clip starts on the exact frame at the in-point.
 
 Clicking a clip in the list jumps the player to that clip's start and
 selects it as a preview, and the timeline zooms in around the clip

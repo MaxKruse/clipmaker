@@ -16,7 +16,7 @@ frames, and download links.
 The code is layered so that everything testable is pure:
 
 ```
-src/lib/times.ts    time parsing/formatting + clip focus window
+src/lib/times.ts    time parsing/formatting + frameAt + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
 src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
@@ -72,7 +72,10 @@ Key invariants:
 ## Export recipes (ported from the clipmaker skill)
 
 - **MP4**: input seek `-ss <start>`, output cut `-t <dur>`, always
-  re-encode. Video: nvenc (fullres VBR) when available, else libx264
+  re-encode. `start` is `clip.start` floored to the frame grid
+  (`frameAt` in times.ts), so the first output frame is the frame a
+  player displays at the in-point, not the first frame after it.
+  Video: nvenc (fullres VBR) when available, else libx264
   slow. Bitrate: source-matched by default
   (`targetVideoKbit(sourceKbit, srcFps, outFps)`), manual kbit allowed.
   Audio: AAC 192k with `asetpts,apad` when the source has audio and the
@@ -80,7 +83,8 @@ Key invariants:
   verified within 1.5 frames; one retry; a second miss becomes a
   `job.warning` (the file is kept).
 - **GIF** (never gif-from-VOD): stage 1 cuts an intermediate mp4 at
-  `<maxEdge>`p30; stage 2 `palettegen` (256 colors, `stats_mode=full`);
+  `<maxEdge>`p30 (same floored start as the MP4); stage 2 `palettegen`
+  (256 colors, `stats_mode=full`);
   stage 3 encodes down the ladder (scale 1.0@30, 1.0@25, .75, .625, .5,
   .375, .25@25) taking the first rung whose file is <= maxMB; an
   emergency 0.1875@25 rung is tried last; if it still exceeds the cap
@@ -101,7 +105,8 @@ Key invariants:
   the persisted clip list, or replace it (every clip validated through
   `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
-  <=480px.
+  <=480px; `time` is floored to the frame grid, the same frame the
+  export will cut at.
 - `POST /api/export` - `{videoId, clips}` - validates each clip server-
   side (end clamped to duration+0.5, min 0.2s), enqueues one job per
   clip (`clipNo` = 1-based index).
@@ -172,6 +177,9 @@ Key invariants:
   row. Leaving the preview also deselects the clip and clears its
   range (back to free playback). Playing, setting in/out, scrubbing,
   and switching/removing the video clear the pending return.
+- Times in the clip list and the timeline in/out chip are shown with
+  milliseconds (`formatTime`); only the zoom-window label uses
+  `formatShort`.
 - Jobs are polled every 1s; the video list is loaded once. Clips are
   per-video project files: loaded for the active video, saved with a
   500ms debounce, gated on the `clipsReady` ref (the active video's
@@ -203,7 +211,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 76 unit tests over the pure libs (times, bitrate,
+- `bun test` - 81 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
