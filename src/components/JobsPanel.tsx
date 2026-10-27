@@ -10,20 +10,25 @@ const STATUS_STYLE: Record<Job["status"], string> = {
   error: "border-danger/50 text-danger",
 };
 
+// Floating export stack: fixed out of the layout flow so exporting never
+// squishes the sidebar (options + clip queue keep their full height).
 export function JobsPanel({ jobs, onClear }: { jobs: Job[]; onClear: () => void }) {
   if (jobs.length === 0) return null;
   const hasFinished = jobs.some((j) => j.status === "done" || j.status === "error");
+  const active = jobs.filter((j) => j.status === "running" || j.status === "queued").length;
   return (
-    <div className="panel shrink-0 p-3 xl:max-h-[40%] xl:overflow-y-auto">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="label">Exports</span>
+    <div className="panel fixed bottom-3 right-3 z-50 w-[340px] max-w-[calc(100vw-24px)] overflow-hidden p-3 shadow-xl">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="label">
+          exports{active > 0 ? ` · ${active} active` : ""}
+        </span>
         {hasFinished && (
           <button className="btn btn-sm" onClick={onClear}>
             clear finished
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-3">
+      <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
         {jobs.map((j) => (
           <div key={j.id} className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">

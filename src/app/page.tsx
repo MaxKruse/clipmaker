@@ -440,7 +440,6 @@ export default function Page() {
               onDelete={deleteClip}
               onExport={exportAll}
             />
-            <JobsPanel jobs={jobs.filter((j) => j.videoId === active.id)} onClear={clearFinished} />
           </div>
         </div>
       ) : (
@@ -448,6 +447,10 @@ export default function Page() {
           load a video above to start clipping
         </div>
       )}
+      <JobsPanel
+        jobs={active ? jobs.filter((j) => j.videoId === active.id) : []}
+        onClear={clearFinished}
+      />
     </div>
   );
 }
