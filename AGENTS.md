@@ -196,7 +196,11 @@ Key invariants:
   toast stack (JobsPanel, fixed bottom-right, out of the layout flow)
   so a running export never squashes the sidebar; it hides itself when
   no job exists and scrolls past 50vh. Below `xl` it falls back to
-  page scroll and a 16:9 video box.
+  page scroll and a 16:9 video box. Every flex level in the xl layout
+  chain (grid, left column, Stage root, video box) needs `min-h-0`:
+  without it the Stage's automatic min-size (driven by the `<video>`'s
+  intrinsic 16:9 size) refuses to shrink and the timeline + crop
+  preview overflow the fixed-height root.
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
