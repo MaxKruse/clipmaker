@@ -34,6 +34,16 @@ export function formatShort(sec: number): string {
     : `${m}:${String(r).padStart(2, "0")}`;
 }
 
+/**
+ * The pts of the frame a player shows at time `t` on a source at `fps`:
+ * floor to the frame grid, so a cut at `t` starts on the exact frame
+ * displayed at `t` (not the next one). The epsilon absorbs float drift
+ * when `t` is itself a frame pts (e.g. a <video> currentTime).
+ */
+export function frameAt(t: number, fps: number): number {
+  return Math.max(0, Math.floor(t * fps + 1e-6) / fps);
+}
+
 /** Visible window that frames [start, end] with `pad` seconds of
  * margin on each side, clamped to the video duration. */
 export function focusWindow(start: number, end: number, duration: number, pad: number) {

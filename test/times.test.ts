@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { focusWindow, formatShort, formatTime, parseTime } from "../src/lib/times";
+import { focusWindow, formatShort, formatTime, frameAt, parseTime } from "../src/lib/times";
 
 describe("parseTime", () => {
   test("parses plain seconds", () => {
@@ -57,6 +57,35 @@ describe("formatShort", () => {
 
   test("hours prefix", () => {
     expect(formatShort(3723)).toBe("1:02:03");
+  });
+});
+
+describe("frameAt", () => {
+  test("returns the pts of the frame displayed at the given time", () => {
+    // 168.52007 is inside the display window of frame 10111 at 60fps
+    // ([168.51667, 168.53333)), so the cut must start on 10111.
+    expect(frameAt(168.52007299270073, 60)).toBeCloseTo(10111 / 60, 9);
+    expect(frameAt(0.1234, 30)).toBeCloseTo(3 / 30, 9);
+    expect(frameAt(0, 60)).toBe(0);
+  });
+
+  test("keeps exact grid points despite float drift", () => {
+    const pts = 10111 / 60; // what a <video> currentTime reports
+    expect(frameAt(pts, 60)).toBeCloseTo(pts, 9);
+    expect(frameAt(2, 30)).toBe(2);
+  });
+
+  test("steps back just before a grid point", () => {
+    expect(frameAt(1.999, 30)).toBeCloseTo(59 / 30, 9);
+    expect(frameAt(2 - 1e-7, 30)).toBeCloseTo(59 / 30, 6);
+  });
+
+  test("works for non-integer fps", () => {
+    expect(frameAt(1.0, 29.97)).toBeCloseTo(Math.floor(1.0 * 29.97) / 29.97, 9);
+  });
+
+  test("never returns a negative pts", () => {
+    expect(frameAt(-0.5, 60)).toBe(0);
   });
 });
 

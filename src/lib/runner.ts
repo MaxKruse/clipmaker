@@ -12,6 +12,7 @@ import { findBin, nvencAvailable, run, runProgress, streamDurations } from "./ff
 import { buildLadder, emergencyRung, type Rung } from "./ladder";
 import { clipFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
+import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
 
 // Bounded pool: up to CONCURRENCY exports run at once. NVENC handles
@@ -89,7 +90,10 @@ async function runJob(job: Job) {
 
 async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   const clip = job.clip;
-  const dur = clip.end - clip.start;
+  // Floor the cut to the frame displayed at clip.start so the output's
+  // first frame is the exact frame a player shows at that sub-second.
+  const start = frameAt(clip.start, video.fps);
+  const dur = clip.end - start;
   const srcKbit = resolveSourceKbit({
     videoKbit: video.videoKbit,
     formatKbit: video.formatKbit,
@@ -106,7 +110,7 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
     buildMp4Args({
       in: video.path,
       out: outPath,
-      start: clip.start,
+      start,
       dur,
       fps: clip.fps,
       kbit,
@@ -151,7 +155,8 @@ async function checkDurationOrRetry(
  */
 async function encodeGif(video: VideoInfo, job: Job, tmp: string, outDir: string) {
   const clip = job.clip;
-  const dur = clip.end - clip.start;
+  const start = frameAt(clip.start, video.fps);
+  const dur = clip.end - start;
   const { maxEdge, maxMB } = clip.gif;
   const inter = path.join(tmp, "inter.mp4");
   const pal = path.join(tmp, "pal.png");
@@ -159,7 +164,7 @@ async function encodeGif(video: VideoInfo, job: Job, tmp: string, outDir: string
   job.stage = "gif: cut";
   await runProgress(
     findBin("ffmpeg"),
-    buildGifStage1Args({ in: video.path, out: inter, start: clip.start, dur, maxEdge, crop: clip.crop }),
+    buildGifStage1Args({ in: video.path, out: inter, start, dur, maxEdge, crop: clip.crop }),
     dur,
     makePctSink(job),
   );
