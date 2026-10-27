@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { focusWindow, formatShort } from "@/lib/times";
+import { focusWindow, formatShort, formatTime } from "@/lib/times";
 
 interface Props {
   duration: number;
@@ -243,7 +243,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
             }}
           >
             <span className="pointer-events-none font-mono text-[10px] whitespace-nowrap text-muted">
-              {formatShort(inPoint)} - {formatShort(outPoint)}
+              {formatTime(inPoint)} - {formatTime(outPoint)}
             </span>
           </div>
           <div data-tl="in" className="absolute top-0 h-full w-3 cursor-ew-resize bg-accent/80" style={{ left: `calc(${pct(inPoint)} - 6px)` }} />

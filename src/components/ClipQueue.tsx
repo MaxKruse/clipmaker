@@ -1,6 +1,6 @@
 "use client";
 
-import { formatShort } from "@/lib/times";
+import { formatTime } from "@/lib/times";
 import type { ClipSpec } from "@/lib/types";
 
 interface Props {
@@ -46,7 +46,7 @@ export function ClipQueue({
             <span className="font-mono text-xs text-muted">{i + 1}.</span>
             <span className="min-w-0 flex-1 truncate text-sm">{c.note || "unnamed"}</span>
             <span className="font-mono text-[11px] text-muted">
-              {formatShort(c.start)} - {formatShort(c.end)}
+              {formatTime(c.start)} - {formatTime(c.end)}
             </span>
             {c.crop && <span className="chip">crop</span>}
             {c.formats.map((f) => (
