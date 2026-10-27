@@ -23,6 +23,7 @@ src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif stages/preview)
+src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
@@ -39,6 +40,10 @@ Key invariants:
 - **`args.ts` builders are locked by their unit tests.** Changing the
   order or content of the generated ffmpeg arguments without updating
   `test/args.test.ts` breaks the suite. The tests pin the exact recipes.
+- **One export batch = one createdAt stamp.** The export route stamps
+  every job of one request with a single timestamp; `sortJobs` (jobs.ts)
+  relies on stable tie order so a batch renders in clip order, and a
+  newer batch renders above older ones.
 - **The runner is the only place that spawns ffmpeg.** Routes and
   components never build ffmpeg commands themselves.
 - **Crops are stored in source pixels** (`CropBox {x,y,w,h}`, all even,
@@ -110,7 +115,8 @@ Key invariants:
 - `POST /api/export` - `{videoId, clips}` - validates each clip server-
   side (end clamped to duration+0.5, min 0.2s), enqueues one job per
   clip (`clipNo` = 1-based index).
-- `GET /api/jobs` (newest first), `DELETE /api/jobs` (clear finished),
+- `GET /api/jobs` (newest batch first, clip order within a batch),
+  `DELETE /api/jobs` (clear finished),
   `GET /api/jobs/[id]/file?k=mp4|gif` (attachment download).
 
 ## Frontend conventions
@@ -186,8 +192,10 @@ Key invariants:
   load finished) so the initial empty record never clobbers disk.
 - Layout: at `xl` and up the app fits the viewport (root `h-screen`, no
   page scroll): the Stage video box stretches to fill the left column,
-  the clip list scrolls inside ClipQueue, and the exports panel is capped
-  at 40% of the sidebar with its own scroll. Below `xl` it falls back to
+  the clip list scrolls inside ClipQueue. Exports render as a floating
+  toast stack (JobsPanel, fixed bottom-right, out of the layout flow)
+  so a running export never squashes the sidebar; it hides itself when
+  no job exists and scrolls past 50vh. Below `xl` it falls back to
   page scroll and a 16:9 video box.
 
 ## Gotchas
@@ -211,8 +219,8 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 81 unit tests over the pure libs (times, bitrate,
-  ladder, names, crop, args, clipsTxt, clips).
+- `bun test` - 84 unit tests over the pure libs (times, bitrate,
+  ladder, names, crop, args, clipsTxt, clips, jobs).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the

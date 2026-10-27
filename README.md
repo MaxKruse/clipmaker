@@ -89,8 +89,10 @@ For a production build: `bun run build && bun run start` (same port).
    edits it the same way. You can queue several clips from one video
    and export them all at once.
 6. **Export** - several jobs run in parallel (two at a time by default,
-   raise it with the CLIPMAKER_CONCURRENCY env var). When a job finishes,
-   the MP4 and GIF appear in the EXPORTS panel. Files are also written to
+   raise it with the CLIPMAKER_CONCURRENCY env var). Job progress shows
+   in a floating exports panel at the bottom-right corner (it takes no
+   space from the app itself); when a job finishes, its MP4 and GIF
+   appear there as download links. Files are also written to
    `out/<video-id>/` on disk. In/out points keep their sub-second
    precision (shown to the millisecond in the clip list and timeline),
    and the exported clip starts on the exact frame at the in-point.
@@ -158,6 +160,6 @@ and can be adjusted individually in the queue before export.
 - Check the browser console and the terminal running the dev server for
   errors.
 - `bun test` runs the unit test suite; `bunx tsc --noEmit` typechecks.
-- Job errors and warnings are shown inline in the EXPORTS panel (e.g. a
+- Job errors and warnings are shown in the floating exports panel (e.g. a
   GIF that could not be shrunk to the cap).
 - File issues to the repo's issue tracker.
