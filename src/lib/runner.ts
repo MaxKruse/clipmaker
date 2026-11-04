@@ -99,7 +99,7 @@ async function runJob(job: Job) {
   }
 }
 
-/** Stage 1: the temp FULL-RES 30fps mp4 cut straight from the source. */
+/** Stage 1: the temp FULL-RES mp4 cut straight from the source, at the anim fps. */
 async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
@@ -107,7 +107,7 @@ async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
   job.stage = "anim: cut (full-res)";
   await runProgress(
     findBin("ffmpeg"),
-    buildGifStage1Args({ in: video.path, out: inter, start, dur, crop: clip.crop }),
+    buildGifStage1Args({ in: video.path, out: inter, start, dur, fps: clip.anim.fps, crop: clip.crop }),
     dur,
     makePctSink(job),
   );
@@ -177,32 +177,34 @@ async function checkDurationOrRetry(
 /**
  * GIF pipeline on the shared full-res temp cut: one palette (from the
  * cut, never the VOD), then two outputs:
- *  - full tier: full-resolution 30fps, no size cap - the original;
- *  - sharable tier: the quality ladder top-down, first rung under the
- *    cap wins, written into sharable/.
+ *  - full tier: full-resolution at the anim fps, no size cap - the
+ *    original;
+ *  - sharable tier: the quality ladder top-down (edges and fps scaled
+ *    to the anim fps), first rung under the cap wins, written into
+ *    sharable/.
  */
 async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string, outDir: string) {
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const { maxEdge, maxMB } = clip.anim;
+  const { fps, maxEdge, maxMB } = clip.anim;
   const pal = path.join(tmp, "pal.png");
 
   job.stage = "gif: palette";
   await run(findBin("ffmpeg"), buildGifPaletteArgs({ in: inter, out: pal }));
 
-  // Full tier: full resolution 30fps, no size cap.
+  // Full tier: full resolution at the anim fps, no size cap.
   const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
   const full = path.join(tmp, "gif-full.gif");
-  job.stage = `gif: full ${fullEdge}p30`;
+  job.stage = `gif: full ${fullEdge}p${fps}`;
   await runProgress(
     findBin("ffmpeg"),
-    buildGifStage3Args({ in: inter, pal, out: full, fps: 30, edge: fullEdge }),
+    buildGifStage3Args({ in: inter, pal, out: full, fps, edge: fullEdge }),
     dur,
     makePctSink(job),
   );
 
-  const winner = await gifSharableRung(job, inter, pal, maxEdge, maxMB, tmp);
+  const winner = await gifSharableRung(job, inter, pal, maxEdge, maxMB, fps, tmp);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "gif");
@@ -224,9 +226,9 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
 
 /** Sharable-tier GIF: the quality ladder top-down, first rung under the cap. */
 async function gifSharableRung(
-  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, tmp: string,
+  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, fps: number, tmp: string,
 ): Promise<{ file: string; rung: Rung }> {
-  const ladder = buildLadder(maxEdge);
+  const ladder = buildLadder(maxEdge, fps);
   const maxBytes = maxMB * 1024 * 1024;
   for (let i = 0; i < ladder.length; i++) {
     const rung = ladder[i];
@@ -236,13 +238,13 @@ async function gifSharableRung(
     if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
   }
-  const e = emergencyRung(maxEdge);
+  const e = emergencyRung(maxEdge, fps);
   const f = path.join(tmp, "gif-emergency.gif");
   job.stage = `gif: sharable ${e.edge}p${e.fps} (emergency)`;
   await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }));
   if (fs.statSync(f).size > maxBytes) {
     fs.rmSync(f, { force: true });
-    throw new Error(`gif exceeds the ${maxMB}MB cap even at ${e.edge}px/25fps - shorten the clip or raise the cap`);
+    throw new Error(`gif exceeds the ${maxMB}MB cap even at ${e.edge}px/${e.fps}fps - shorten the clip or raise the cap`);
   }
   return { file: f, rung: e };
 }

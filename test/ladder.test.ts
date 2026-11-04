@@ -8,8 +8,8 @@ import {
 } from "../src/lib/ladder";
 
 describe("buildLadder", () => {
-  test("1024px ladder matches the skill recipe", () => {
-    expect(buildLadder(1024)).toEqual([
+  test("1024px @ 30fps ladder matches the skill recipe", () => {
+    expect(buildLadder(1024, 30)).toEqual([
       { edge: 1024, fps: 30 },
       { edge: 1024, fps: 25 },
       { edge: 768, fps: 25 },
@@ -20,8 +20,8 @@ describe("buildLadder", () => {
     ]);
   });
 
-  test("640px ladder scales the same ratios", () => {
-    expect(buildLadder(640)).toEqual([
+  test("640px @ 30fps ladder scales the same ratios", () => {
+    expect(buildLadder(640, 30)).toEqual([
       { edge: 640, fps: 30 },
       { edge: 640, fps: 25 },
       { edge: 480, fps: 25 },
@@ -32,23 +32,48 @@ describe("buildLadder", () => {
     ]);
   });
 
-  test("edges are always even", () => {
+  test("fps steps scale with the anim fps (5/6 of base after the first rung)", () => {
+    expect(buildLadder(1024, 60)).toEqual([
+      { edge: 1024, fps: 60 },
+      { edge: 1024, fps: 50 },
+      { edge: 768, fps: 50 },
+      { edge: 640, fps: 50 },
+      { edge: 512, fps: 50 },
+      { edge: 384, fps: 50 },
+      { edge: 256, fps: 50 },
+    ]);
+    expect(buildLadder(640, 25)).toEqual([
+      { edge: 640, fps: 25 },
+      { edge: 640, fps: 21 },
+      { edge: 480, fps: 21 },
+      { edge: 400, fps: 21 },
+      { edge: 320, fps: 21 },
+      { edge: 240, fps: 21 },
+      { edge: 160, fps: 21 },
+    ]);
+  });
+
+  test("edges are always even and fps stays >= 1", () => {
     for (const maxEdge of [1024, 768, 640, 512, 256, 192]) {
-      for (const rung of buildLadder(maxEdge)) {
-        expect(rung.edge % 2).toBe(0);
-        expect(rung.edge).toBeGreaterThan(0);
+      for (const fps of [15, 20, 25, 30, 60]) {
+        for (const rung of buildLadder(maxEdge, fps)) {
+          expect(rung.edge % 2).toBe(0);
+          expect(rung.edge).toBeGreaterThan(0);
+          expect(rung.fps).toBeGreaterThanOrEqual(1);
+        }
       }
     }
   });
 });
 
 describe("emergencyRung", () => {
-  test("192@25 for 1024px", () => {
-    expect(emergencyRung(1024)).toEqual({ edge: 192, fps: 25 });
+  test("192@25 for 1024px @ 30fps", () => {
+    expect(emergencyRung(1024, 30)).toEqual({ edge: 192, fps: 25 });
   });
 
-  test("scales with max edge", () => {
-    expect(emergencyRung(640)).toEqual({ edge: 120, fps: 25 });
+  test("fps scales with the anim fps", () => {
+    expect(emergencyRung(1024, 60)).toEqual({ edge: 192, fps: 50 });
+    expect(emergencyRung(640, 25)).toEqual({ edge: 120, fps: 21 });
   });
 });
 

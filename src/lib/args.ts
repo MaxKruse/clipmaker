@@ -60,18 +60,19 @@ export function buildMp4Args(s: Mp4Args): string[] {
 }
 
 /**
- * Animated stage 1: temp FULL-RES 30fps mp4 cut straight from the
- * source. Both tiers are derived from it: the full-quality output
- * directly, the sharable one downscaled per rung.
+ * Animated stage 1: temp FULL-RES mp4 cut straight from the source,
+ * re-timed to the anim fps. Both tiers are derived from it: the
+ * full-quality output directly, the sharable one downscaled per rung.
  */
 export function buildGifStage1Args(s: {
   in: string;
   out: string;
   start: number;
   dur: number;
+  fps: number;
   crop: CropBox | null;
 }): string[] {
-  const vf = [cropFilter(s.crop), "fps=30"]
+  const vf = [cropFilter(s.crop), `fps=${s.fps}`]
     .filter(Boolean)
     .join(",");
   return [

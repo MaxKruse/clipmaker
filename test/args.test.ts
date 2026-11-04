@@ -79,10 +79,10 @@ describe("buildMp4Args (nvenc, audio, crop)", () => {
 });
 
 describe("buildGifStage1Args", () => {
-  test("cut a FULL-RES temp 30fps mp4 from source with crop (no downscale)", () => {
+  test("cut a FULL-RES temp mp4 from source with crop (no downscale)", () => {
     expect(
       buildGifStage1Args({
-        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10, crop: CROP,
+        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10, crop: CROP, fps: 30,
       }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
@@ -94,9 +94,14 @@ describe("buildGifStage1Args", () => {
   });
 
   test("no crop -> fps only", () => {
-    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null });
+    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null, fps: 30 });
     expect(args[args.indexOf("-vf") + 1]).toBe("fps=30");
     expect(args).not.toContain("scale");
+  });
+
+  test("fps flows into the -vf chain", () => {
+    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null, fps: 60 });
+    expect(args[args.indexOf("-vf") + 1]).toBe("fps=60");
   });
 });
 
