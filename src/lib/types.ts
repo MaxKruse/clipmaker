@@ -20,6 +20,8 @@ export interface VideoInfo {
 
 /** Animated-image export options (GIF and AVIF share the same knobs). */
 export interface AnimOpts {
+  /** Frame rate of the shared intermediate cut and both tiers. */
+  fps: number;
   maxMB: number;
   maxEdge: number;
 }
@@ -83,8 +85,8 @@ export function defaultClip(note = ""): ClipSpec {
     crop: null,
     formats: ["mp4", "gif"],
     audio: true,
-    fps: 30,
+    fps: 60,
     quality: { mode: "source", kbit: 0 },
-    anim: { maxMB: 48, maxEdge: 1024 },
+    anim: { fps: 30, maxMB: 48, maxEdge: 1024 },
   };
 }

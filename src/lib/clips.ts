@@ -16,7 +16,7 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
     (f: unknown) => f === "mp4" || f === "gif" || f === "avif",
   );
   if (formats.length === 0) throw new Error("pick at least one format");
-  const fps = [25, 30, 60].includes(Number(r.fps)) ? Number(r.fps) : 30;
+  const fps = [25, 30, 60].includes(Number(r.fps)) ? Number(r.fps) : 60;
   const quality = {
     mode: r?.quality?.mode === "manual" ? ("manual" as const) : ("source" as const),
     kbit: Math.max(250, Math.round(Number(r?.quality?.kbit) || 0)),
@@ -24,8 +24,9 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
   // r.gif is the pre-avif key for the same options (old project files).
   const animRaw = r?.anim ?? r?.gif;
   const anim = {
+    fps: [15, 20, 25, 30, 60].includes(Number(animRaw?.fps)) ? Number(animRaw.fps) : 30,
     maxMB: [10, 25, 48].includes(Number(animRaw?.maxMB)) ? Number(animRaw.maxMB) : 48,
-    maxEdge: [256, 512, 768, 1024].includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
+    maxEdge: [256, 512, 768, 1024, 1280, 1440].includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
   };
   const crop = r?.crop && typeof r.crop === "object" ? normalizeCrop(v.width, v.height, r.crop) : null;
   return {

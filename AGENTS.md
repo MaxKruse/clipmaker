@@ -20,7 +20,7 @@ The code is layered so that everything testable is pure:
 ```
 src/lib/times.ts    time parsing/formatting + frameAt + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
-src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps) + AVIF CRF ladder
+src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
@@ -64,9 +64,13 @@ Key invariants:
   `uploaded` marks files copied into `uploads/` (safe to delete).
 - `ClipSpec { id, note, start, end, crop, formats, audio, fps, quality,
   anim }` - one clip. `formats` is a non-empty subset of
-  `"mp4" | "gif" | "avif"`. `quality { mode: "source" | "manual", kbit }`
-  applies to MP4; `anim { maxMB, maxEdge }` applies to the sharable
-  GIF/AVIF tier. Defaults in `types.ts:defaultClip()`.
+  `"mp4" | "gif" | "avif"`. `fps` (default 60; 25/30/60) is the MP4
+  frame rate; `quality { mode: "source" | "manual", kbit }` applies to
+  MP4; `anim { fps, maxMB, maxEdge }` (fps default 30; 15/20/25/30/60)
+  applies to GIF/AVIF - `fps` is the shared intermediate's frame rate
+  and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
+  options 256-1440; the ladder is capped at the source/crop width and
+  never upscales). Defaults in `types.ts:defaultClip()`.
 - `Job { id, videoId, videoName, clip, clipNo, status, progress, stage,
   outputs, error, warning, createdAt }` - `status` is queued/running/
   done/error. `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
@@ -97,22 +101,29 @@ Key invariants:
   `job.warning` (the file is kept).
 - **GIF / AVIF dual tier** (never gif/avif-from-VOD): one shared
   full-res intermediate mp4 is cut first at the clip's frame (same
-  floored start as the MP4, crop applied, 30 fps) and feeds every tier.
-  Each clip with gif and/or avif selected ALWAYS produces two versions
-  per format: a **full** tier (full resolution - crop size if cropped,
-  else source size - uncapped, at the video root) and a **sharable**
-  tier (scaled to `anim.maxEdge`, capped at `anim.maxMB`, in
-  `sharable/`; sharable gif files carry the `-<maxEdge>` edge suffix).
+  floored start as the MP4, crop applied, at `anim.fps`) and feeds every
+  tier. Each clip with gif and/or avif selected ALWAYS produces two
+  versions per format: a **full** tier (full resolution - crop size if
+  cropped, else source size - at `anim.fps`, uncapped, at the video root)
+  and a **sharable** tier (scaled to `anim.maxEdge`, capped at
+  `anim.maxMB`, in `sharable/`; sharable gif files carry the `-<maxEdge>`
+  edge suffix).
   - **GIF**: shared `palettegen` from the full-res cut (256 colors,
-    `stats_mode=full`); full tier = one stage-3 encode at full size@30,
-    no cap; sharable tier = the resolution/fps ladder (scale 1.0@30,
-    1.0@25, .75, .625, .5, .375, .25@25) taking the first rung whose
-    file is <= maxMB; an emergency 0.1875@25 rung is tried last; if it
+    `stats_mode=full`); full tier = one stage-3 encode at full
+    size@anim.fps, no cap; sharable tier = the ping-pong quality ladder:
+    each edge step (maxEdge x 1.0, .75, .625, .5, .375, .25, even-floored,
+    capped at the full tier's edge so it never upscales) is tried at
+    anim.fps and then at 5/6 x anim.fps (the recipe's 30 -> 25), highest
+    quality first, taking the first rung whose file is <= maxMB; an
+    emergency 0.1875-edge rung at the stepped fps is tried last; if it
     still exceeds the cap the job fails.
   - **AVIF**: full tier = one crf30 encode at full size, no cap;
-    sharable tier = CRF ladder (30, 34, 38, 42, 46, 50) with
-    `scaleTo=maxEdge`, first file <= maxMB wins; emergency crf54 rung
-    last; still over = job fails.
+    sharable tier = the 3-axis ladder: the same 12-rung edge x fps
+    ping-pong grid as the GIF, repeated per CRF step (25, 29, 33, 36 -
+    CRF only changes after the whole grid is exhausted, 48 rungs),
+    first file <= maxMB wins; an emergency maxEdge@anim.fps@crf40 rung
+    is tried last; if it still exceeds the cap the job fails. Duration
+    verify uses the winning rung's fps.
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -244,8 +255,8 @@ Key invariants:
   sections (Note, In/Out, Formats, MP4 video, GIF / AVIF, Crop) with
   progressive disclosure - the MP4 section (frame rate, audio,
   quality) renders only when the clip's formats include mp4, and the
-  GIF / AVIF section (sharable size cap, sharable max edge) only when
-  gif/avif is selected.
+  the GIF / AVIF section (frame rate, sharable size cap, sharable max
+  edge) only when gif/avif is selected.
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
@@ -268,8 +279,8 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 93 unit tests over the pure libs (times, bitrate,
-  ladder, names, crop, args, clipsTxt, clips, jobs).
+- `bun test` - 97 unit tests over the pure libs (times, bitrate,
+  ladder, names, crop, args, clipsTxt, clips, jobs, types).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the

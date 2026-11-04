@@ -60,18 +60,19 @@ export function buildMp4Args(s: Mp4Args): string[] {
 }
 
 /**
- * Animated stage 1: temp FULL-RES 30fps mp4 cut straight from the
- * source. Both tiers are derived from it: the full-quality output
- * directly, the sharable one downscaled per rung.
+ * Animated stage 1: temp FULL-RES mp4 cut straight from the source,
+ * re-timed to the anim fps. Both tiers are derived from it: the
+ * full-quality output directly, the sharable one downscaled per rung.
  */
 export function buildGifStage1Args(s: {
   in: string;
   out: string;
   start: number;
   dur: number;
+  fps: number;
   crop: CropBox | null;
 }): string[] {
-  const vf = [cropFilter(s.crop), "fps=30"]
+  const vf = [cropFilter(s.crop), `fps=${s.fps}`]
     .filter(Boolean)
     .join(",");
   return [
@@ -114,8 +115,9 @@ export type AvifEncoder = "libsvtav1" | "libaom-av1";
 
 /**
  * AVIF: animated AV1 into the avif (ISOBMFF) muxer, from the full-res
- * temp intermediate. `scaleTo` (sharable tier) downscales to the max
- * edge; the full tier encodes as-is. The crf is the size control.
+ * temp intermediate. Sharable rungs pass `scaleTo` (rung edge) and
+ * `fps` (rung fps); the full tier encodes as-is. The crf is the size
+ * control.
  */
 export function buildAvifArgs(s: {
   in: string;
@@ -123,12 +125,19 @@ export function buildAvifArgs(s: {
   crf: number;
   encoder: AvifEncoder;
   scaleTo?: number;
+  fps?: number;
 }): string[] {
+  const vf = [
+    s.scaleTo ? `scale=${s.scaleTo}:-2:flags=lanczos` : null,
+    s.fps ? `fps=${s.fps}` : null,
+  ]
+    .filter(Boolean)
+    .join(",");
   const a = [
     "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
     "-i", s.in,
   ];
-  if (s.scaleTo) a.push("-vf", `scale=${s.scaleTo}:-2:flags=lanczos`);
+  if (vf) a.push("-vf", vf);
   a.push("-c:v", s.encoder, "-crf", String(s.crf), "-pix_fmt", "yuv420p", "-an", s.out);
   return a;
 }

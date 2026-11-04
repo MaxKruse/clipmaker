@@ -79,11 +79,13 @@ For a production build: `bun run build && bun run start` (same port).
    A thin scrub bar sits directly under the video: click or drag it
    to jump anywhere; the active in/out range shows as a band.
 4. **Tune the export** - per clip: note, formats (mp4, gif, avif - any
-   combination), audio on/off, frame rate (25/30/60), MP4 quality
-   (matched to the source by default, or a manual bitrate), and for GIFs/
-   AVIFs a size cap (10/25/48 MB) plus a maximum edge length (256-1024 px)
-   for the sharable copy. The full-res original is always exported with
-   it, no cap.
+   combination), audio on/off, frame rate (MP4: 25/30/60, default 60;
+   GIF/AVIF: 15/20/25/30/60, default 30), MP4 quality (matched to the
+   source by default, or a manual bitrate), and for GIFs/AVIFs a size cap
+   (10/25/48 MB) plus a maximum edge length (256-1440 px) for the
+   sharable copy - it is never upscaled, so a crop smaller than the max
+   edge just keeps the best resolution it has. The full-res original is
+   always exported with it, no cap.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -96,7 +98,7 @@ For a production build: `bun run build && bun run start` (same port).
    raise it with the CLIPMAKER_CONCURRENCY env var). When you export, a
    front-and-center export view opens: an overall progress bar plus a
    progress bar and stage text per clip (e.g. `gif: sharable 512p25
-   (3/7)`), and download links for every finished file. While it is
+   (8/12)`), and download links for every finished file. While it is
    working you can minimize it to a small pill in the bottom-right
    corner ("show" reopens it); when everything is done it stays open
    with the outputs until you close it. Files are also written to
@@ -142,8 +144,9 @@ File format - one clip per line:
 - Blank lines are ignored and unparseable lines are skipped. Ranges are
   clamped to the video's length.
 
-Imported clips get the default settings (MP4 + GIF, audio on, 30 fps)
-and can be adjusted individually in the queue before export.
+Imported clips get the default settings (MP4 + GIF, audio on, MP4 at
+60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
+queue before export.
 
 ## Limitations
 
@@ -156,14 +159,16 @@ and can be adjusted individually in the queue before export.
 - The app assumes it runs on the same machine as the videos (it cannot
   reach paths on other hosts).
 - GIFs are built in three stages (cut, palette, encode); the sharable
-  copy shrinks automatically (resolution, then frame rate) until it fits
-  the size cap, and the job fails with an error if even the lowest rung
-  exceeds it. The full-res copy has no cap and can be large (a 10s 1080p
+  copy shrinks automatically through ever smaller sizes and slightly
+  lower frame rates (alternating) until it fits the size cap, and the
+  job fails with an error if even the smallest rung exceeds it. The full-res copy has no cap and can be large (a 10s 1080p
   GIF is easily 100 MB+).
 - Animated AVIF needs an ffmpeg with an AV1 encoder (`libsvtav1` is
   preferred, `libaom-av1` is the fallback); without one the AVIF jobs
   fail with a clear error and the MP4/GIF exports are unaffected. AVIF
   encodes are slower than GIFs but far smaller at the same quality.
+  The sharable AVIF copy shrinks the same way as the sharable GIF -
+  size and frame rate first, then quality.
 - Session data (loaded videos, clip lists, job history) lives in
   `.data/`; running jobs are not resumable after a server restart.
 - The web UI needs a browser with `fetch` streaming for uploads; it is

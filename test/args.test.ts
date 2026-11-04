@@ -79,10 +79,10 @@ describe("buildMp4Args (nvenc, audio, crop)", () => {
 });
 
 describe("buildGifStage1Args", () => {
-  test("cut a FULL-RES temp 30fps mp4 from source with crop (no downscale)", () => {
+  test("cut a FULL-RES temp mp4 from source with crop (no downscale)", () => {
     expect(
       buildGifStage1Args({
-        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10, crop: CROP,
+        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10, crop: CROP, fps: 30,
       }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
@@ -94,9 +94,14 @@ describe("buildGifStage1Args", () => {
   });
 
   test("no crop -> fps only", () => {
-    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null });
+    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null, fps: 30 });
     expect(args[args.indexOf("-vf") + 1]).toBe("fps=30");
     expect(args).not.toContain("scale");
+  });
+
+  test("fps flows into the -vf chain", () => {
+    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null, fps: 60 });
+    expect(args[args.indexOf("-vf") + 1]).toBe("fps=60");
   });
 });
 
@@ -154,14 +159,14 @@ describe("buildAvifArgs", () => {
     ]);
   });
 
-  test("sharable variant scales down to maxEdge", () => {
+  test("sharable rung: scale to the rung edge and fps filter", () => {
     expect(
-      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 42, encoder: "libsvtav1", scaleTo: 640 }),
+      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 29, encoder: "libsvtav1", scaleTo: 640, fps: 25 }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4",
-      "-vf", "scale=640:-2:flags=lanczos",
-      "-c:v", "libsvtav1", "-crf", "42", "-pix_fmt", "yuv420p",
+      "-vf", "scale=640:-2:flags=lanczos,fps=25",
+      "-c:v", "libsvtav1", "-crf", "29", "-pix_fmt", "yuv420p",
       "-an", "clip1.avif",
     ]);
   });

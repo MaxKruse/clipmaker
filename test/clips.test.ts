@@ -14,7 +14,7 @@ test("accepts a valid clip", () => {
       audio: true,
       fps: 25,
       quality: { mode: "manual", kbit: 5000 },
-      anim: { maxMB: 25, maxEdge: 512 },
+      anim: { fps: 60, maxMB: 25, maxEdge: 512 },
     },
     v
   );
@@ -26,7 +26,17 @@ test("accepts a valid clip", () => {
   expect(c.audio).toBe(true);
   expect(c.fps).toBe(25);
   expect(c.quality).toEqual({ mode: "manual", kbit: 5000 });
-  expect(c.anim).toEqual({ maxMB: 25, maxEdge: 512 });
+  expect(c.anim).toEqual({ fps: 60, maxMB: 25, maxEdge: 512 });
+});
+
+test("anim fps outside the allowed list falls back to 30", () => {
+  const c = toClip({ start: 1, end: 5, formats: ["gif"], anim: { fps: 48, maxMB: 10, maxEdge: 256 } }, v);
+  expect(c.anim).toEqual({ fps: 30, maxMB: 10, maxEdge: 256 });
+});
+
+test("accepts 1280 and 1440 sharable max edges", () => {
+  expect(toClip({ start: 1, end: 5, formats: ["gif"], anim: { maxEdge: 1280 } }, v).anim.maxEdge).toBe(1280);
+  expect(toClip({ start: 1, end: 5, formats: ["gif"], anim: { maxEdge: 1440 } }, v).anim.maxEdge).toBe(1440);
 });
 
 test("accepts avif as a format", () => {
@@ -34,9 +44,9 @@ test("accepts avif as a format", () => {
   expect(c.formats).toEqual(["mp4", "avif"]);
 });
 
-test("migrates the legacy gif options key to anim", () => {
+test("migrates the legacy gif options key to anim (fps defaults to 30)", () => {
   const c = toClip({ start: 1, end: 5, formats: ["gif"], gif: { maxMB: 25, maxEdge: 768 } }, v);
-  expect(c.anim).toEqual({ maxMB: 25, maxEdge: 768 });
+  expect(c.anim).toEqual({ fps: 30, maxMB: 25, maxEdge: 768 });
 });
 
 test("rejects non-numeric start/end", () => {
@@ -74,9 +84,9 @@ test("clamps enums to defaults", () => {
     v
   );
   expect(c.formats).toEqual(["mp4", "gif", "avif"]);
-  expect(c.fps).toBe(30);
+  expect(c.fps).toBe(60);
   expect(c.quality).toEqual({ mode: "source", kbit: 250 });
-  expect(c.anim).toEqual({ maxMB: 48, maxEdge: 1024 });
+  expect(c.anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1024 });
 });
 
 test("drops missing crop", () => {
