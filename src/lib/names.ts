@@ -14,11 +14,12 @@ export function sanitizeNote(note: string): string {
 /**
  * Output filename per the clipmaker convention:
  * mp4: clip<N>[-<note>].mp4, gif: clip<N>[-<note>]-<longest-edge-px>.gif
+ * (avif keeps the max edge, so it never carries an edge suffix).
  */
 export function clipFileName(
   n: number,
   note: string | undefined,
-  ext: "mp4" | "gif",
+  ext: "mp4" | "gif" | "avif",
   edgePx?: number,
 ): string {
   const t = sanitizeNote(note ?? "");

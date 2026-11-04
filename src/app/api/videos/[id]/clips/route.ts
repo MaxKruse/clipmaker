@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { toClip } from "@/lib/clips";
 import { store } from "@/lib/store";
 
-/** A video's project file: its persisted clip list. */
+/**
+ * A video's project file: its persisted clip list. Clips are re-run
+ * through toClip so old rows (e.g. the pre-avif `gif` key) come back in
+ * canonical shape; a clip that no longer parses is kept as-is rather
+ * than dropped.
+ */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!store.videos.has(id)) return NextResponse.json({ error: "unknown video" }, { status: 404 });
-  return NextResponse.json({ clips: store.getClips(id) });
+  const v = store.videos.get(id);
+  if (!v) return NextResponse.json({ error: "unknown video" }, { status: 404 });
+  const clips = store.getClips(id).map((c) => {
+    try {
+      return toClip(c, v);
+    } catch {
+      return c;
+    }
+  });
+  return NextResponse.json({ clips });
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildAvifArgs,
   buildGifPaletteArgs,
   buildGifStage1Args,
   buildGifStage3Args,
@@ -78,19 +79,24 @@ describe("buildMp4Args (nvenc, audio, crop)", () => {
 });
 
 describe("buildGifStage1Args", () => {
-  test("cut temp 1024p30 mp4 from source with crop", () => {
+  test("cut a FULL-RES temp 30fps mp4 from source with crop (no downscale)", () => {
     expect(
       buildGifStage1Args({
-        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10,
-        maxEdge: 1024, crop: CROP,
+        in: "vod.mp4", out: "inter.mp4", start: 30, dur: 10, crop: CROP,
       }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-ss", "30", "-i", "vod.mp4", "-t", "10",
-      "-vf", "crop=1280:720:0:0,fps=30,scale=1024:-2:flags=lanczos",
+      "-vf", "crop=1280:720:0:0,fps=30",
       "-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p",
       "-an", "inter.mp4",
     ]);
+  });
+
+  test("no crop -> fps only", () => {
+    const args = buildGifStage1Args({ in: "a.mp4", out: "b.mp4", start: 0, dur: 5, crop: null });
+    expect(args[args.indexOf("-vf") + 1]).toBe("fps=30");
+    expect(args).not.toContain("scale");
   });
 });
 
@@ -133,5 +139,37 @@ describe("buildPreviewArgs", () => {
   test("no crop -> scale only", () => {
     const args = buildPreviewArgs({ in: "a.mp4", out: "b.jpg", time: 0, maxW: 480, crop: null });
     expect(args[args.indexOf("-vf") + 1]).toBe("scale=480:-2:flags=lanczos");
+  });
+});
+
+describe("buildAvifArgs", () => {
+  test("svt-av1 full-res animated AVIF at a given crf (no scale)", () => {
+    expect(
+      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 30, encoder: "libsvtav1" }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-i", "inter.mp4",
+      "-c:v", "libsvtav1", "-crf", "30", "-pix_fmt", "yuv420p",
+      "-an", "clip1.avif",
+    ]);
+  });
+
+  test("sharable variant scales down to maxEdge", () => {
+    expect(
+      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 42, encoder: "libsvtav1", scaleTo: 640 }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-i", "inter.mp4",
+      "-vf", "scale=640:-2:flags=lanczos",
+      "-c:v", "libsvtav1", "-crf", "42", "-pix_fmt", "yuv420p",
+      "-an", "clip1.avif",
+    ]);
+  });
+
+  test("libaom fallback uses the same shape", () => {
+    const args = buildAvifArgs({ in: "a.mp4", out: "b.avif", crf: 42, encoder: "libaom-av1" });
+    const iv = args.indexOf("-c:v");
+    expect(args.slice(iv, iv + 5)).toEqual(["-c:v", "libaom-av1", "-crf", "42", "-pix_fmt"]);
+    expect(args[args.length - 1]).toBe("b.avif");
   });
 });

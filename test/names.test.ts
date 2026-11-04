@@ -16,6 +16,12 @@ describe("clipFileName", () => {
     expect(clipFileName(3, undefined, "gif", 512)).toBe("clip3-512.gif");
   });
 
+  test("avif never appends an edge (it keeps the max edge)", () => {
+    expect(clipFileName(4, "Cute", "avif")).toBe("clip4-Cute.avif");
+    expect(clipFileName(3, undefined, "avif")).toBe("clip3.avif");
+    expect(clipFileName(3, undefined, "avif", 1024)).toBe("clip3.avif");
+  });
+
   test("note never starts/ends with dash", () => {
     expect(clipFileName(1, "  ", "mp4")).toBe("clip1.mp4");
   });

@@ -227,7 +227,7 @@ export default function Page() {
       ...c,
       formats: [...c.formats],
       quality: { ...c.quality },
-      gif: { ...c.gif },
+      anim: { ...c.anim },
       crop: c.crop ? { ...c.crop } : null,
     });
     setHasRange(true);
@@ -281,7 +281,7 @@ export default function Page() {
       id: newId(),
       formats: [...draft.formats],
       quality: { ...draft.quality },
-      gif: { ...draft.gif },
+      anim: { ...draft.anim },
       crop: draft.crop ? { ...draft.crop } : null,
     };
     if (!hasRange) {
@@ -289,7 +289,7 @@ export default function Page() {
       c.end = Math.min(active.duration, c.start + 5);
     }
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), c] }));
-    setDraft({ ...c, formats: [...c.formats], quality: { ...c.quality }, gif: { ...c.gif }, crop: c.crop ? { ...c.crop } : null });
+    setDraft({ ...c, formats: [...c.formats], quality: { ...c.quality }, anim: { ...c.anim }, crop: c.crop ? { ...c.crop } : null });
     setSelectedId(c.id);
     setHasRange(true);
     setStep(hasRange ? 2 : 1);

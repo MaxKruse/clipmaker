@@ -30,6 +30,22 @@ export function emergencyRung(maxEdge: number): Rung {
   return { edge: evenFloor(maxEdge * EMERGENCY_RATIO), fps: 25 };
 }
 
+// AVIF (animated AV1) keeps the max-edge resolution and steps the AV1
+// CRF down instead of the pixel size: at equal byte budgets AV1 spends
+// its bits on detail, not on a smaller frame.
+const AVIF_CRF_STEPS = [30, 34, 38, 42, 46, 50];
+const AVIF_EMERGENCY_CRF = 54;
+
+/** AVIF crf ladder, best quality first (higher crf = smaller file). */
+export function buildAvifCrfLadder(): number[] {
+  return [...AVIF_CRF_STEPS];
+}
+
+/** Last-resort crf tried when every ladder rung exceeds the size cap. */
+export function avifEmergencyCrf(): number {
+  return AVIF_EMERGENCY_CRF;
+}
+
 /**
  * Index of the first rung whose measured size fits under maxMB,
  * or -1 when nothing fits. null entries are skipped (failed rung).

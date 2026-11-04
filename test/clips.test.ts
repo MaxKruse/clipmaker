@@ -14,7 +14,7 @@ test("accepts a valid clip", () => {
       audio: true,
       fps: 25,
       quality: { mode: "manual", kbit: 5000 },
-      gif: { maxMB: 25, maxEdge: 512 },
+      anim: { maxMB: 25, maxEdge: 512 },
     },
     v
   );
@@ -26,7 +26,17 @@ test("accepts a valid clip", () => {
   expect(c.audio).toBe(true);
   expect(c.fps).toBe(25);
   expect(c.quality).toEqual({ mode: "manual", kbit: 5000 });
-  expect(c.gif).toEqual({ maxMB: 25, maxEdge: 512 });
+  expect(c.anim).toEqual({ maxMB: 25, maxEdge: 512 });
+});
+
+test("accepts avif as a format", () => {
+  const c = toClip({ start: 1, end: 5, formats: ["mp4", "avif"], anim: { maxMB: 10, maxEdge: 512 } }, v);
+  expect(c.formats).toEqual(["mp4", "avif"]);
+});
+
+test("migrates the legacy gif options key to anim", () => {
+  const c = toClip({ start: 1, end: 5, formats: ["gif"], gif: { maxMB: 25, maxEdge: 768 } }, v);
+  expect(c.anim).toEqual({ maxMB: 25, maxEdge: 768 });
 });
 
 test("rejects non-numeric start/end", () => {
@@ -56,17 +66,17 @@ test("clamps enums to defaults", () => {
     {
       start: 1,
       end: 2,
-      formats: ["mp4", "gif", "webm"],
+      formats: ["mp4", "gif", "avif", "webm"],
       fps: 12,
       quality: { mode: "auto", kbit: 10 },
       gif: { maxMB: 99, maxEdge: 33 },
     },
     v
   );
-  expect(c.formats).toEqual(["mp4", "gif"]);
+  expect(c.formats).toEqual(["mp4", "gif", "avif"]);
   expect(c.fps).toBe(30);
   expect(c.quality).toEqual({ mode: "source", kbit: 250 });
-  expect(c.gif).toEqual({ maxMB: 48, maxEdge: 1024 });
+  expect(c.anim).toEqual({ maxMB: 48, maxEdge: 1024 });
 });
 
 test("drops missing crop", () => {

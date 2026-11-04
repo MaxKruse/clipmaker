@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 
 // Fallback locations when the binary is not on PATH (this machine).
@@ -221,4 +224,40 @@ export function nvencAvailable(): Promise<boolean> {
     }
   })();
   return nvencPromise;
+}
+
+export type AvifEncoder = "libsvtav1" | "libaom-av1";
+
+let avifPromise: Promise<AvifEncoder | null> | null = null;
+
+/**
+ * Probe-encode 0.5s of testsrc into a real .avif, preferring libsvtav1
+ * (best quality per encode-second) and falling back to libaom-av1
+ * (slow, but present in more builds). Null when the ffmpeg build has
+ * no usable AV1 encoder at all.
+ */
+export function avifEncoder(): Promise<AvifEncoder | null> {
+  avifPromise ??= (async () => {
+    for (const enc of ["libsvtav1", "libaom-av1"] as const) {
+      const probe = path.join(os.tmpdir(), `clipmaker-avif-probe-${enc}.avif`);
+      try {
+        await run(
+          findBin("ffmpeg"),
+          [
+            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+            "-f", "lavfi", "-i", "testsrc=duration=0.5:size=320x180:rate=10",
+            "-c:v", enc, "-pix_fmt", "yuv420p", probe,
+          ],
+          90_000,
+        );
+        return enc;
+      } catch {
+        // this encoder is missing or broken; try the next one
+      } finally {
+        fs.rmSync(probe, { force: true });
+      }
+    }
+    return null;
+  })();
+  return avifPromise;
 }

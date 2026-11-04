@@ -1,15 +1,17 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildAvifArgs,
   buildGifPaletteArgs,
   buildGifStage1Args,
   buildGifStage3Args,
   buildMp4Args,
+  type AvifEncoder,
   type Mp4Encoder,
 } from "./args";
 import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
-import { findBin, nvencAvailable, run, runProgress, streamDurations } from "./ffmpeg";
-import { buildLadder, emergencyRung, type Rung } from "./ladder";
+import { avifEncoder, findBin, nvencAvailable, run, runProgress, streamDurations } from "./ffmpeg";
+import { avifEmergencyCrf, buildAvifCrfLadder, buildLadder, emergencyRung, evenFloor, type Rung } from "./ladder";
 import { clipFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
@@ -85,7 +87,30 @@ async function runJob(job: Job) {
   const outDir = path.join(OUT_DIR, job.videoId);
   fs.mkdirSync(outDir, { recursive: true });
   if (job.clip.formats.includes("mp4")) await encodeMp4(video, job, outDir);
-  if (job.clip.formats.includes("gif")) await encodeGif(video, job, tmp, outDir);
+  const wantsGif = job.clip.formats.includes("gif");
+  const wantsAvif = job.clip.formats.includes("avif");
+  if (wantsGif || wantsAvif) {
+    // One <maxEdge>p30 temp cut feeds both pipelines (never gif/avif
+    // straight from the VOD); cut once when both are requested.
+    const inter = path.join(tmp, "inter.mp4");
+    await cutIntermediate(video, job, inter);
+    if (wantsGif) await encodeGif(video, job, inter, tmp, outDir);
+    if (wantsAvif) await encodeAvif(video, job, inter, tmp, outDir);
+  }
+}
+
+/** Stage 1: the temp FULL-RES 30fps mp4 cut straight from the source. */
+async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
+  const clip = job.clip;
+  const start = frameAt(clip.start, video.fps);
+  const dur = clip.end - start;
+  job.stage = "anim: cut (full-res)";
+  await runProgress(
+    findBin("ffmpeg"),
+    buildGifStage1Args({ in: video.path, out: inter, start, dur, crop: clip.crop }),
+    dur,
+    makePctSink(job),
+  );
 }
 
 async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
@@ -150,68 +175,156 @@ async function checkDurationOrRetry(
 }
 
 /**
- * GIF pipeline: temp <maxEdge>p30 mp4 first (never gif-from-VOD), then
- * palette, then the quality ladder top-down; first rung under the cap wins.
+ * GIF pipeline on the shared full-res temp cut: one palette (from the
+ * cut, never the VOD), then two outputs:
+ *  - full tier: full-resolution 30fps, no size cap - the original;
+ *  - sharable tier: the quality ladder top-down, first rung under the
+ *    cap wins, written into sharable/.
  */
-async function encodeGif(video: VideoInfo, job: Job, tmp: string, outDir: string) {
+async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string, outDir: string) {
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const { maxEdge, maxMB } = clip.gif;
-  const inter = path.join(tmp, "inter.mp4");
+  const { maxEdge, maxMB } = clip.anim;
   const pal = path.join(tmp, "pal.png");
-
-  job.stage = "gif: cut";
-  await runProgress(
-    findBin("ffmpeg"),
-    buildGifStage1Args({ in: video.path, out: inter, start, dur, maxEdge, crop: clip.crop }),
-    dur,
-    makePctSink(job),
-  );
 
   job.stage = "gif: palette";
   await run(findBin("ffmpeg"), buildGifPaletteArgs({ in: inter, out: pal }));
 
+  // Full tier: full resolution 30fps, no size cap.
+  const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
+  const full = path.join(tmp, "gif-full.gif");
+  job.stage = `gif: full ${fullEdge}p30`;
+  await runProgress(
+    findBin("ffmpeg"),
+    buildGifStage3Args({ in: inter, pal, out: full, fps: 30, edge: fullEdge }),
+    dur,
+    makePctSink(job),
+  );
+
+  const winner = await gifSharableRung(job, inter, pal, maxEdge, maxMB, tmp);
+  const shareDir = path.join(outDir, "sharable");
+  fs.mkdirSync(shareDir, { recursive: true });
+  const fullName = clipFileName(job.clipNo, clip.note, "gif");
+  const shareName = `sharable/${clipFileName(job.clipNo, clip.note, "gif", winner.rung.edge)}`;
+  fs.renameSync(full, path.join(outDir, fullName));
+  fs.renameSync(winner.file, path.join(shareDir, path.basename(shareName)));
+
+  job.stage = "gif: verify";
+  const { container } = await streamDurations(path.join(shareDir, path.basename(shareName)));
+  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
+    job.warning = `gif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
+  }
+  job.outputs.push(
+    { kind: "gif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
+    { kind: "gif", name: shareName, size: fs.statSync(path.join(shareDir, path.basename(shareName))).size, tier: "sharable" },
+  );
+  store.updateJob(job);
+}
+
+/** Sharable-tier GIF: the quality ladder top-down, first rung under the cap. */
+async function gifSharableRung(
+  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, tmp: string,
+): Promise<{ file: string; rung: Rung }> {
   const ladder = buildLadder(maxEdge);
   const maxBytes = maxMB * 1024 * 1024;
-  let winner: { rung: Rung; file: string } | null = null;
   for (let i = 0; i < ladder.length; i++) {
     const rung = ladder[i];
     const f = path.join(tmp, `gif-${rung.edge}-${rung.fps}.gif`);
-    job.stage = `gif: ${rung.edge}p${rung.fps} (${i + 1}/${ladder.length})`;
+    job.stage = `gif: sharable ${rung.edge}p${rung.fps} (${i + 1}/${ladder.length})`;
     await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: rung.fps, edge: rung.edge }));
-    const size = fs.statSync(f).size;
-    if (size <= maxBytes) {
-      winner = { rung, file: f };
-      break;
-    }
+    if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
   }
+  const e = emergencyRung(maxEdge);
+  const f = path.join(tmp, "gif-emergency.gif");
+  job.stage = `gif: sharable ${e.edge}p${e.fps} (emergency)`;
+  await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }));
+  if (fs.statSync(f).size > maxBytes) {
+    fs.rmSync(f, { force: true });
+    throw new Error(`gif exceeds the ${maxMB}MB cap even at ${e.edge}px/25fps - shorten the clip or raise the cap`);
+  }
+  return { file: f, rung: e };
+}
 
-  if (!winner) {
-    const e = emergencyRung(maxEdge);
-    const f = path.join(tmp, "gif-emergency.gif");
-    job.stage = `gif: ${e.edge}p${e.fps} (emergency)`;
-    await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }));
-    if (fs.statSync(f).size > maxBytes) {
-      fs.rmSync(f, { force: true });
-      throw new Error(
-        `gif exceeds the ${maxMB}MB cap even at ${e.edge}px/25fps - shorten the clip or raise the cap`,
-      );
-    }
-    winner = { rung: e, file: f };
+/**
+ * AVIF pipeline on the shared full-res temp cut: two outputs:
+ *  - full tier: full resolution at the best CRF, no size cap;
+ *  - sharable tier: scaled to the max edge, CRF ladder top-down, first
+ *    rung under the cap wins, written into sharable/.
+ * Slower than the GIF path but far better quality per byte.
+ */
+async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string, outDir: string) {
+  const clip = job.clip;
+  const start = frameAt(clip.start, video.fps);
+  const dur = clip.end - start;
+  const { maxMB, maxEdge } = clip.anim;
+  const encoder = await avifEncoder();
+  if (!encoder) {
+    throw new Error("this ffmpeg build has no AV1 encoder (needs libsvtav1 or libaom-av1) - re-export as mp4/gif");
   }
 
-  const outName = clipFileName(job.clipNo, clip.note, "gif", winner.rung.edge);
-  const outPath = path.join(outDir, outName);
-  fs.renameSync(winner.file, outPath);
+  // Full tier: full resolution at the top CRF, no size cap.
+  const fullCrf = buildAvifCrfLadder()[0];
+  const full = path.join(tmp, "avif-full.avif");
+  job.stage = `avif: full ${encoder} crf${fullCrf}`;
+  await runProgress(
+    findBin("ffmpeg"),
+    buildAvifArgs({ in: inter, out: full, crf: fullCrf, encoder }),
+    dur,
+    makePctSink(job),
+  );
 
-  job.stage = "gif: verify";
-  const { container } = await streamDurations(outPath);
-  const worst = Math.abs(container - dur);
-  if (worst > 1.5 / winner.rung.fps) {
-    job.warning = `gif duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
+  const winner = await avifSharableCrf(job, inter, maxEdge, maxMB, encoder, dur, tmp);
+  const shareDir = path.join(outDir, "sharable");
+  fs.mkdirSync(shareDir, { recursive: true });
+  const fullName = clipFileName(job.clipNo, clip.note, "avif");
+  fs.renameSync(full, path.join(outDir, fullName));
+  fs.renameSync(winner.file, path.join(shareDir, fullName));
+
+  job.stage = "avif: verify";
+  const { container } = await streamDurations(path.join(shareDir, fullName));
+  if (Math.abs(container - dur) > 1.5 / 30) {
+    job.warning = `avif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
   }
-  job.outputs.push({ kind: "gif", name: outName, size: fs.statSync(outPath).size });
+  job.outputs.push(
+    { kind: "avif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
+    { kind: "avif", name: `sharable/${fullName}`, size: fs.statSync(path.join(shareDir, fullName)).size, tier: "sharable" },
+  );
   store.updateJob(job);
+}
+
+/** Sharable-tier AVIF: CRF ladder at the max edge, first rung under the cap. */
+async function avifSharableCrf(
+  job: Job, inter: string, maxEdge: number, maxMB: number, encoder: AvifEncoder, dur: number, tmp: string,
+): Promise<{ file: string; crf: number }> {
+  const maxBytes = maxMB * 1024 * 1024;
+  const ladder = buildAvifCrfLadder();
+  for (let i = 0; i < ladder.length; i++) {
+    const crf = ladder[i];
+    const f = path.join(tmp, `avif-crf${crf}.avif`);
+    job.stage = `avif: sharable crf${crf} (${i + 1}/${ladder.length})`;
+    await runProgress(
+      findBin("ffmpeg"),
+      buildAvifArgs({ in: inter, out: f, crf, encoder, scaleTo: maxEdge }),
+      dur,
+      makePctSink(job),
+    );
+    if (fs.statSync(f).size <= maxBytes) return { file: f, crf };
+    fs.rmSync(f, { force: true });
+  }
+  const crf = avifEmergencyCrf();
+  const f = path.join(tmp, "avif-emergency.avif");
+  job.stage = `avif: sharable crf${crf} (emergency)`;
+  await runProgress(
+    findBin("ffmpeg"),
+    buildAvifArgs({ in: inter, out: f, crf, encoder, scaleTo: maxEdge }),
+    dur,
+    makePctSink(job),
+  );
+  if (fs.statSync(f).size > maxBytes) {
+    fs.rmSync(f, { force: true });
+    throw new Error(`avif exceeds the ${maxMB}MB cap even at crf${crf} - shorten the clip or raise the cap`);
+  }
+  return { file: f, crf };
 }

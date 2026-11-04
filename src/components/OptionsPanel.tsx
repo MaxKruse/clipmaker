@@ -107,7 +107,7 @@ export function OptionsPanel({
 
       <div className="flex items-center gap-2">
         <span className="label">Formats</span>
-        {(["mp4", "gif"] as Format[]).map((f) => (
+        {(["mp4", "gif", "avif"] as Format[]).map((f) => (
           <button key={f} className={pill(draft.formats.includes(f))} onClick={() => toggleFormat(f)}>
             {f.toUpperCase()}
           </button>
@@ -170,11 +170,11 @@ export function OptionsPanel({
 
       <div className="grid grid-cols-2 gap-2">
         <div className="flex flex-col gap-1.5">
-          <span className="label">GIF size cap</span>
+          <span className="label">GIF/AVIF size cap</span>
           <select
             className="input w-full"
-            value={draft.gif.maxMB}
-            onChange={(e) => onChange({ gif: { ...draft.gif, maxMB: Number(e.target.value) } })}
+            value={draft.anim.maxMB}
+            onChange={(e) => onChange({ anim: { ...draft.anim, maxMB: Number(e.target.value) } })}
           >
             <option value={10}>10 MB</option>
             <option value={25}>25 MB</option>
@@ -182,11 +182,11 @@ export function OptionsPanel({
           </select>
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="label">GIF max edge</span>
+          <span className="label">GIF/AVIF max edge</span>
           <select
             className="input w-full"
-            value={draft.gif.maxEdge}
-            onChange={(e) => onChange({ gif: { ...draft.gif, maxEdge: Number(e.target.value) } })}
+            value={draft.anim.maxEdge}
+            onChange={(e) => onChange({ anim: { ...draft.anim, maxEdge: Number(e.target.value) } })}
           >
             <option value={256}>256 px</option>
             <option value={512}>512 px</option>

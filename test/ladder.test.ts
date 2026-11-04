@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { buildLadder, emergencyRung, pickRungIndex } from "../src/lib/ladder";
+import {
+  avifEmergencyCrf,
+  buildAvifCrfLadder,
+  buildLadder,
+  emergencyRung,
+  pickRungIndex,
+} from "../src/lib/ladder";
 
 describe("buildLadder", () => {
   test("1024px ladder matches the skill recipe", () => {
@@ -63,5 +69,15 @@ describe("pickRungIndex", () => {
 
   test("empty -> -1", () => {
     expect(pickRungIndex([], 48)).toBe(-1);
+  });
+});
+
+describe("AVIF crf ladder", () => {
+  test("steps down from high quality to low (higher crf = smaller)", () => {
+    expect(buildAvifCrfLadder()).toEqual([30, 34, 38, 42, 46, 50]);
+  });
+
+  test("emergency crf is lower quality than the last rung", () => {
+    expect(avifEmergencyCrf()).toBe(54);
   });
 });

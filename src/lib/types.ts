@@ -1,6 +1,6 @@
 import type { CropBox } from "./crop";
 
-export type Format = "mp4" | "gif";
+export type Format = "mp4" | "gif" | "avif";
 
 export interface VideoInfo {
   id: string;
@@ -18,7 +18,8 @@ export interface VideoInfo {
   sizeBytes: number;
 }
 
-export interface GifOpts {
+/** Animated-image export options (GIF and AVIF share the same knobs). */
+export interface AnimOpts {
   maxMB: number;
   maxEdge: number;
 }
@@ -39,13 +40,16 @@ export interface ClipSpec {
   audio: boolean;
   fps: number;
   quality: QualityOpts;
-  gif: GifOpts;
+  anim: AnimOpts;
 }
 
 export interface JobOutput {
   kind: Format;
+  /** Path relative to out/<videoId>/; the sharable tier sits in sharable/. */
   name: string;
   size: number;
+  /** "full" = full-quality/full-res original, "sharable" = size-capped copy. */
+  tier?: "full" | "sharable";
 }
 
 export type JobStatus = "queued" | "running" | "done" | "error";
@@ -81,6 +85,6 @@ export function defaultClip(note = ""): ClipSpec {
     audio: true,
     fps: 30,
     quality: { mode: "source", kbit: 0 },
-    gif: { maxMB: 48, maxEdge: 1024 },
+    anim: { maxMB: 48, maxEdge: 1024 },
   };
 }
