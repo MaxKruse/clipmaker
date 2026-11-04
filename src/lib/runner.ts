@@ -204,7 +204,9 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
     makePctSink(job),
   );
 
-  const winner = await gifSharableRung(job, inter, pal, maxEdge, maxMB, fps, tmp);
+  // The ladder never upscales: capped at the full tier's edge, so a crop
+  // (or source) narrower than maxEdge just keeps the best it has.
+  const winner = await gifSharableRung(job, inter, pal, Math.min(maxEdge, fullEdge), maxMB, fps, tmp);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "gif");

@@ -238,6 +238,8 @@ export function OptionsPanel({
                 <option value={512}>512 px</option>
                 <option value={768}>768 px</option>
                 <option value={1024}>1024 px</option>
+                <option value={1280}>1280 px</option>
+                <option value={1440}>1440 px</option>
               </select>
             </div>
           </div>

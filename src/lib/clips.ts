@@ -26,7 +26,7 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
   const anim = {
     fps: [15, 20, 25, 30, 60].includes(Number(animRaw?.fps)) ? Number(animRaw.fps) : 30,
     maxMB: [10, 25, 48].includes(Number(animRaw?.maxMB)) ? Number(animRaw.maxMB) : 48,
-    maxEdge: [256, 512, 768, 1024].includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
+    maxEdge: [256, 512, 768, 1024, 1280, 1440].includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
   };
   const crop = r?.crop && typeof r.crop === "object" ? normalizeCrop(v.width, v.height, r.crop) : null;
   return {

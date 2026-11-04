@@ -34,6 +34,11 @@ test("anim fps outside the allowed list falls back to 30", () => {
   expect(c.anim).toEqual({ fps: 30, maxMB: 10, maxEdge: 256 });
 });
 
+test("accepts 1280 and 1440 sharable max edges", () => {
+  expect(toClip({ start: 1, end: 5, formats: ["gif"], anim: { maxEdge: 1280 } }, v).anim.maxEdge).toBe(1280);
+  expect(toClip({ start: 1, end: 5, formats: ["gif"], anim: { maxEdge: 1440 } }, v).anim.maxEdge).toBe(1440);
+});
+
 test("accepts avif as a format", () => {
   const c = toClip({ start: 1, end: 5, formats: ["mp4", "avif"], anim: { maxMB: 10, maxEdge: 512 } }, v);
   expect(c.formats).toEqual(["mp4", "avif"]);

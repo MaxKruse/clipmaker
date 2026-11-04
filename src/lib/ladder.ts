@@ -3,33 +3,32 @@ export interface Rung {
   fps: number;
 }
 
-// Quality ladder ratios (skill recipe, 1024px baseline @ 30fps):
-// 1024@30, 1024@25, 768@25, 640@25, 512@25, 384@25, 256@25.
-// The fps step after the first rung is 5/6 of the chosen anim fps
-// (the recipe's 30 -> 25), so at 30fps the ladder is exactly the recipe.
+// Quality ladder (skill recipe, 1024px baseline): ping-pong the two
+// quality axes - first the fps (anim fps -> 5/6 x anim fps, the recipe's
+// 30 -> 25), then one edge step down at the anim fps again, and so on.
 const FPS_STEP = 5 / 6;
-const RATIOS: { r: number; f: number }[] = [
-  { r: 1, f: 1 },
-  { r: 1, f: FPS_STEP },
-  { r: 0.75, f: FPS_STEP },
-  { r: 0.625, f: FPS_STEP },
-  { r: 0.5, f: FPS_STEP },
-  { r: 0.375, f: FPS_STEP },
-  { r: 0.25, f: FPS_STEP },
-];
+const EDGE_RATIOS = [1, 0.75, 0.625, 0.5, 0.375, 0.25]; // 1024, 768, 640, 512, 384, 256
 const EMERGENCY_RATIO = 0.1875; // 192px at the 1024 baseline
 
 export function evenFloor(x: number): number {
   return Math.max(2, Math.floor(x / 2) * 2);
 }
 
-/** Scale the quality ladder to the chosen max edge and anim fps; edges stay even. */
+/**
+ * Sharable ladder, highest quality first: each edge step is tried at the
+ * anim fps and then at the reduced fps (5/6 x anim fps); when neither
+ * fits, the edge drops one step and the fps goes back up. Edges stay
+ * even; maxEdge must already be capped by the crop/source width, so the
+ * sharable tier never upscales.
+ */
 export function buildLadder(maxEdge: number, fps: number): Rung[] {
-  return RATIOS.map(({ r, f }) => ({
-    edge: evenFloor(maxEdge * r),
-    // The reduced rungs drop to 5/6 of the anim fps (the recipe's 30 -> 25).
-    fps: f === 1 ? fps : Math.max(1, Math.round(fps * FPS_STEP)),
-  }));
+  const low = Math.max(1, Math.round(fps * FPS_STEP));
+  const rungs: Rung[] = [];
+  for (const r of EDGE_RATIOS) {
+    const edge = evenFloor(maxEdge * r);
+    rungs.push({ edge, fps }, { edge, fps: low });
+  }
+  return rungs;
 }
 
 /** Last-resort rung tried when every ladder rung exceeds the size cap. */
