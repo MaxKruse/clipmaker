@@ -20,14 +20,14 @@ export function ClipQueue({
   clips, selectedId, exporting, exportError, attnAdd, onAdd, onSelect, onDelete, onExport,
 }: Props) {
   return (
-    <div data-clips-panel className="panel flex min-h-0 flex-1 flex-col p-3">
+    <div data-clips-panel className="panel flex flex-col p-3 xl:min-h-0 xl:flex-1">
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <span className="label">Clips ({clips.length})</span>
         <button className={`btn btn-sm ${attnAdd ? "attn" : ""}`} disabled={exporting} onClick={onAdd}>
           Add clip
         </button>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
+      <div className="flex flex-col gap-1 pr-1 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
         {clips.length === 0 && (
           <span className="text-xs text-muted">
             Click "Add clip", then set the times on the timeline and crop the video if you want. Selecting a clip edits it in place.

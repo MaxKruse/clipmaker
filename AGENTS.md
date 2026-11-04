@@ -217,17 +217,19 @@ Key invariants:
   per-video project files: loaded for the active video, saved with a
   500ms debounce, gated on the `clipsReady` ref (the active video's
   load finished) so the initial empty record never clobbers disk.
-- Layout: at `xl` and up the app fits the viewport (root `h-screen`, no
-  page scroll): the Stage video box stretches to fill the left column,
-  the clip list scrolls inside ClipQueue. Export progress is not in the
-  layout flow at all: a front-and-center modal (ExportModal) with a
-  bottom-right pill (ExportPill) as its minimized form; both hide
-  themselves when no job exists. Below `xl` it falls back to page
-  scroll and a 16:9 video box. Every flex level in the xl layout chain
-  (grid, left column, Stage root, video box) needs `min-h-0`:
-  without it the Stage's automatic min-size (driven by the `<video>`'s
-  intrinsic 16:9 size) refuses to shrink and the timeline + crop
-  preview overflow the fixed-height root.
+- Layout: the page scrolls at every size (root `min-h-screen`, no
+  fixed viewport height). The Stage video box is always 16:9
+  (`aspect-video w-full`); the Stage's height is content-driven (video
+  box + scrub bar + transport row). At `xl` and up the work area is a
+  two-column grid (`1fr` + `400px`): the left column stacks Stage,
+  Timeline, CropPreview; the right column stacks OptionsPanel (natural
+  height) over ClipQueue, and the grid stretches the right column to
+  the left column's height so ClipQueue (`xl:flex-1`) fills it and the
+  clip list scrolls inside. Below `xl` everything is one column and
+  the clip list renders at natural height. Export progress is not in
+  the layout flow at all: a front-and-center modal (ExportModal) with
+  a bottom-right pill (ExportPill) as its minimized form; both hide
+  themselves when no job exists.
 - **Export modal**: opens on export and auto-opens on an
   inactive->active jobs transition (covers page reload mid-export).
   While any job is active it cannot be dismissed - X / Esc / backdrop

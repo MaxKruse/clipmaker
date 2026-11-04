@@ -373,7 +373,7 @@ export default function Page() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-3 p-4 xl:h-screen xl:overflow-hidden">
+    <div className="flex min-h-screen flex-col gap-3 p-4">
       <header className="flex flex-wrap items-baseline gap-3">
         <h1 className="text-lg font-semibold tracking-tight">clipmaker</h1>
         <span className="chip">local video clip editor</span>
@@ -393,8 +393,8 @@ export default function Page() {
       />
 
       {active ? (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="flex min-h-0 min-w-0 flex-col gap-3">
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="flex min-w-0 flex-col gap-3">
             <Stage
               src={`/api/videos/${active.id}/file`}
               srcW={active.width}
@@ -438,7 +438,7 @@ export default function Page() {
             />
             <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
           </div>
-          <div className="flex min-h-0 flex-col gap-3 xl:overflow-hidden">
+          <div className="flex flex-col gap-3">
             <OptionsPanel
               video={active}
               draft={draft}
