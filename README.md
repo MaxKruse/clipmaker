@@ -159,14 +159,16 @@ queue before export.
 - The app assumes it runs on the same machine as the videos (it cannot
   reach paths on other hosts).
 - GIFs are built in three stages (cut, palette, encode); the sharable
-  copy shrinks automatically (resolution, then frame rate) until it fits
-  the size cap, and the job fails with an error if even the lowest rung
-  exceeds it. The full-res copy has no cap and can be large (a 10s 1080p
+  copy shrinks automatically through ever smaller sizes and slightly
+  lower frame rates (alternating) until it fits the size cap, and the
+  job fails with an error if even the smallest rung exceeds it. The full-res copy has no cap and can be large (a 10s 1080p
   GIF is easily 100 MB+).
 - Animated AVIF needs an ffmpeg with an AV1 encoder (`libsvtav1` is
   preferred, `libaom-av1` is the fallback); without one the AVIF jobs
   fail with a clear error and the MP4/GIF exports are unaffected. AVIF
   encodes are slower than GIFs but far smaller at the same quality.
+  The sharable AVIF copy shrinks the same way as the sharable GIF -
+  size and frame rate first, then quality.
 - Session data (loaded videos, clip lists, job history) lives in
   `.data/`; running jobs are not resumable after a server restart.
 - The web UI needs a browser with `fetch` streaming for uploads; it is

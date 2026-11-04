@@ -20,7 +20,7 @@ The code is layered so that everything testable is pure:
 ```
 src/lib/times.ts    time parsing/formatting + frameAt + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
-src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps) + AVIF CRF ladder
+src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
@@ -118,9 +118,12 @@ Key invariants:
     emergency 0.1875-edge rung at the stepped fps is tried last; if it
     still exceeds the cap the job fails.
   - **AVIF**: full tier = one crf30 encode at full size, no cap;
-    sharable tier = CRF ladder (30, 34, 38, 42, 46, 50) with
-    `scaleTo=maxEdge`, first file <= maxMB wins; emergency crf54 rung
-    last; still over = job fails.
+    sharable tier = the 3-axis ladder: the same 12-rung edge x fps
+    ping-pong grid as the GIF, repeated per CRF step (25, 29, 33, 36 -
+    CRF only changes after the whole grid is exhausted, 48 rungs),
+    first file <= maxMB wins; an emergency maxEdge@anim.fps@crf40 rung
+    is tried last; if it still exceeds the cap the job fails. Duration
+    verify uses the winning rung's fps.
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -276,7 +279,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 100 unit tests over the pure libs (times, bitrate,
+- `bun test` - 97 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips, jobs, types).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
