@@ -200,7 +200,21 @@ export function OptionsPanel({
             Each clip exports two versions: a full-res original, and a size-capped copy in{" "}
             <span className="font-mono">sharable/</span>.
           </p>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Frame rate</span>
+              <select
+                className="input w-full"
+                value={draft.anim.fps}
+                onChange={(e) => onChange({ anim: { ...draft.anim, fps: Number(e.target.value) } })}
+              >
+                <option value={15}>15 fps</option>
+                <option value={20}>20 fps</option>
+                <option value={25}>25 fps</option>
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+              </select>
+            </div>
             <div className="flex flex-col gap-1.5">
               <span className="label">Sharable size cap</span>
               <select
