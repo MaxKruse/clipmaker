@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ClipQueue } from "@/components/ClipQueue";
 import { CropPreview } from "@/components/CropPreview";
 import type { Aspect } from "@/components/CropOverlay";
-import { JobsPanel } from "@/components/JobsPanel";
+import { ExportModal } from "@/components/ExportModal";
+import { ExportPill } from "@/components/ExportPill";
 import { OptionsPanel } from "@/components/OptionsPanel";
 import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
@@ -41,12 +42,25 @@ export default function Page() {
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // The export view: front-and-center modal while a batch runs; the
+  // user can minimize it to a corner pill (reopen with "show").
+  const [exportOpen, setExportOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The active video's clips are loaded from disk (save guard).
   const clipsReady = useRef<string | null>(null);
 
   const active = videos.find((v) => v.id === activeId) ?? null;
   const activeClips = active ? (clips[active.id] ?? []) : [];
+  const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
+
+  // Bring the export view front-and-center whenever a batch starts
+  // (fresh export, or a page load that finds jobs still running).
+  const jobsWereActive = useRef(false);
+  useEffect(() => {
+    const now = activeJobs.length > 0;
+    if (now && !jobsWereActive.current) setExportOpen(true);
+    jobsWereActive.current = now;
+  }, [activeJobs.length]);
 
   // Load sessions once; poll jobs every second (cheap on localhost).
   useEffect(() => {
@@ -338,6 +352,7 @@ export default function Page() {
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? res.statusText);
+      setExportOpen(true);
     } catch (e) {
       setExportError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -349,7 +364,11 @@ export default function Page() {
     fetch("/api/jobs", { method: "DELETE" })
       .then(() => fetch("/api/jobs"))
       .then((r) => r.json())
-      .then(setJobs)
+      .then((j: Job[]) => {
+        setJobs(j);
+        // Nothing left worth showing -> back to the editor.
+        if (!j.some((x) => x.status === "error")) setExportOpen(false);
+      })
       .catch(() => {});
   };
 
@@ -447,10 +466,16 @@ export default function Page() {
           load a video above to start clipping
         </div>
       )}
-      <JobsPanel
-        jobs={active ? jobs.filter((j) => j.videoId === active.id) : []}
-        onClear={clearFinished}
-      />
+      {exportOpen && jobs.length > 0 ? (
+        <ExportModal
+          jobs={jobs}
+          onClose={() => setExportOpen(false)}
+          onMinimize={activeJobs.length > 0 ? () => setExportOpen(false) : undefined}
+          onClear={clearFinished}
+        />
+      ) : (
+        <ExportPill jobs={jobs} onView={() => setExportOpen(true)} />
+      )}
     </div>
   );
 }
