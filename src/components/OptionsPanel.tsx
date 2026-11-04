@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
 import type { ClipSpec, Format, VideoInfo } from "@/lib/types";
@@ -41,6 +41,17 @@ function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) =
         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
     />
+  );
+}
+
+/** A titled group below a divider: keeps the panel scannable instead of
+ * one flat list of controls. */
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-3">
+      <span className="label">{title}</span>
+      {children}
+    </div>
   );
 }
 
@@ -105,99 +116,121 @@ export function OptionsPanel({
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <span className="label">Formats</span>
-        {(["mp4", "gif", "avif"] as Format[]).map((f) => (
-          <button key={f} className={pill(draft.formats.includes(f))} onClick={() => toggleFormat(f)}>
-            {f.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <label className="mt-4 flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="size-4 accent-[#58a6ff]"
-            disabled={!video.hasAudio}
-            checked={draft.audio && video.hasAudio}
-            onChange={(e) => onChange({ audio: e.target.checked })}
-          />
-          Audio
-          {!video.hasAudio && <span className="text-[11px] text-muted">(none in source)</span>}
-        </label>
-        <div className="flex flex-col gap-1.5">
-          <span className="label">Frame rate</span>
-          <select
-            className="input w-full"
-            value={draft.fps}
-            onChange={(e) => onChange({ fps: Number(e.target.value) })}
-          >
-            <option value={25}>25 fps</option>
-            <option value={30}>30 fps</option>
-            <option value={60}>60 fps</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <span className="label">MP4 quality</span>
+      <Section title="Formats">
         <div className="flex flex-wrap items-center gap-2">
-          {(["source", "manual"] as const).map((m) => (
+          {(["mp4", "gif", "avif"] as Format[]).map((f) => (
             <button
-              key={m}
-              className={pill(draft.quality.mode === m)}
-              onClick={() => onChange({ quality: { ...draft.quality, mode: m } })}
+              key={f}
+              className={pill(draft.formats.includes(f))}
+              title={
+                f === "mp4"
+                  ? "H.264 video with audio - the default"
+                  : f === "gif"
+                    ? "GIF: plays anywhere, but heavy for its quality"
+                    : "animated AVIF (AV1): much better quality per byte than GIF, but a slower encode"
+              }
+              onClick={() => toggleFormat(f)}
             >
-              {m}
+              {f.toUpperCase()}
             </button>
           ))}
-          {draft.quality.mode === "source" ? (
-            <span className="chip">video ~{autoKbit}k</span>
-          ) : (
-            <input
-              type="number"
-              min={250}
-              step={50}
-              className="input w-24 font-mono"
-              value={draft.quality.kbit || ""}
-              placeholder="kbit"
-              onChange={(e) => onChange({ quality: { ...draft.quality, kbit: Number(e.target.value) || 0 } })}
-            />
-          )}
         </div>
-      </div>
+      </Section>
 
-      <div className="grid grid-cols-2 gap-2">
-        <div className="flex flex-col gap-1.5">
-          <span className="label">GIF/AVIF size cap</span>
-          <select
-            className="input w-full"
-            value={draft.anim.maxMB}
-            onChange={(e) => onChange({ anim: { ...draft.anim, maxMB: Number(e.target.value) } })}
-          >
-            <option value={10}>10 MB</option>
-            <option value={25}>25 MB</option>
-            <option value={48}>48 MB</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <span className="label">GIF/AVIF max edge</span>
-          <select
-            className="input w-full"
-            value={draft.anim.maxEdge}
-            onChange={(e) => onChange({ anim: { ...draft.anim, maxEdge: Number(e.target.value) } })}
-          >
-            <option value={256}>256 px</option>
-            <option value={512}>512 px</option>
-            <option value={768}>768 px</option>
-            <option value={1024}>1024 px</option>
-          </select>
-        </div>
-      </div>
+      {draft.formats.includes("mp4") && (
+        <Section title="MP4 video">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Frame rate</span>
+              <select
+                className="input w-full"
+                value={draft.fps}
+                onChange={(e) => onChange({ fps: Number(e.target.value) })}
+              >
+                <option value={25}>25 fps</option>
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+              </select>
+            </div>
+            <label className="flex cursor-pointer items-end gap-2 pb-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-[#58a6ff]"
+                disabled={!video.hasAudio}
+                checked={draft.audio && video.hasAudio}
+                onChange={(e) => onChange({ audio: e.target.checked })}
+              />
+              Audio
+              {!video.hasAudio && <span className="text-[11px] text-muted">(none in source)</span>}
+            </label>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="label">Quality</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["source", "manual"] as const).map((m) => (
+                <button
+                  key={m}
+                  className={pill(draft.quality.mode === m)}
+                  onClick={() => onChange({ quality: { ...draft.quality, mode: m } })}
+                >
+                  {m}
+                </button>
+              ))}
+              {draft.quality.mode === "source" ? (
+                <span className="chip">video ~{autoKbit}k</span>
+              ) : (
+                <input
+                  type="number"
+                  min={250}
+                  step={50}
+                  className="input w-24 font-mono"
+                  value={draft.quality.kbit || ""}
+                  placeholder="kbit"
+                  onChange={(e) => onChange({ quality: { ...draft.quality, kbit: Number(e.target.value) || 0 } })}
+                />
+              )}
+            </div>
+          </div>
+        </Section>
+      )}
 
-      <div className="flex flex-col gap-1.5">
-        <span className="label">Crop</span>
+      {(draft.formats.includes("gif") || draft.formats.includes("avif")) && (
+        <Section title="GIF / AVIF">
+          <p className="text-xs leading-relaxed text-muted">
+            Each clip exports two versions: a full-res original, and a size-capped copy in{" "}
+            <span className="font-mono">sharable/</span>.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Sharable size cap</span>
+              <select
+                className="input w-full"
+                value={draft.anim.maxMB}
+                onChange={(e) => onChange({ anim: { ...draft.anim, maxMB: Number(e.target.value) } })}
+              >
+                <option value={10}>10 MB</option>
+                <option value={25}>25 MB</option>
+                <option value={48}>48 MB</option>
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Sharable max edge</span>
+              <select
+                className="input w-full"
+                value={draft.anim.maxEdge}
+                onChange={(e) => onChange({ anim: { ...draft.anim, maxEdge: Number(e.target.value) } })}
+              >
+                <option value={256}>256 px</option>
+                <option value={512}>512 px</option>
+                <option value={768}>768 px</option>
+                <option value={1024}>1024 px</option>
+              </select>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      <Section title="Crop">
         <div className="flex flex-wrap items-center gap-2">
           <select className="input" value={aspect} onChange={(e) => onAspect(e.target.value as Aspect)}>
             <option value="free">free</option>
@@ -216,7 +249,7 @@ export function OptionsPanel({
             </>
           )}
         </div>
-      </div>
+      </Section>
     </div>
   );
 }
