@@ -3,7 +3,9 @@
 A local web app for cutting clips out of your own videos. Load a video from
 your disk (or upload a file), scrub it, mark in/out points, optionally crop
 the frame, mute the audio, pick a quality and frame rate, and export each
-clip as an MP4 and/or a GIF.
+clip as an MP4 and/or a GIF and/or an animated AVIF. Every GIF/AVIF export
+comes in two versions: a full-quality, full-resolution original, and a
+size-capped "sharable" copy that fits the cap you set.
 
 Everything runs on your machine: the video files never leave it, and
 exports are encoded with your local `ffmpeg` (NVENC GPU encoding is
@@ -76,10 +78,12 @@ For a production build: `bun run build && bun run start` (same port).
    Play button or `space`.
    A thin scrub bar sits directly under the video: click or drag it
    to jump anywhere; the active in/out range shows as a band.
-4. **Tune the export** - per clip: note, formats (mp4, gif, both), audio
-   on/off, frame rate (25/30/60), MP4 quality (matched to the source by
-   default, or a manual bitrate), and for GIFs a size cap (10/25/48 MB)
-   plus a maximum edge length (256-1024 px).
+4. **Tune the export** - per clip: note, formats (mp4, gif, avif - any
+   combination), audio on/off, frame rate (25/30/60), MP4 quality
+   (matched to the source by default, or a manual bitrate), and for GIFs/
+   AVIFs a size cap (10/25/48 MB) plus a maximum edge length (256-1024 px)
+   for the sharable copy. The full-res original is always exported with
+   it, no cap.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -89,11 +93,15 @@ For a production build: `bun run build && bun run start` (same port).
    edits it the same way. You can queue several clips from one video
    and export them all at once.
 6. **Export** - several jobs run in parallel (two at a time by default,
-   raise it with the CLIPMAKER_CONCURRENCY env var). Job progress shows
-   in a floating exports panel at the bottom-right corner (it takes no
-   space from the app itself); when a job finishes, its MP4 and GIF
-   appear there as download links. Files are also written to
-   `out/<video-id>/` on disk. In/out points keep their sub-second
+   raise it with the CLIPMAKER_CONCURRENCY env var). When you export, a
+   front-and-center export view opens: an overall progress bar plus a
+   progress bar and stage text per clip (e.g. `gif: sharable 512p25
+   (3/7)`), and download links for every finished file. While it is
+   working you can minimize it to a small pill in the bottom-right
+   corner ("show" reopens it); when everything is done it stays open
+   with the outputs until you close it. Files are also written to
+   `out/<video-id>/` on disk, sharable copies in
+   `out/<video-id>/sharable/`. In/out points keep their sub-second
    precision (shown to the millisecond in the clip list and timeline),
    and the exported clip starts on the exact frame at the in-point.
 
@@ -147,9 +155,15 @@ and can be adjusted individually in the queue before export.
   the local-path option.
 - The app assumes it runs on the same machine as the videos (it cannot
   reach paths on other hosts).
-- GIFs are built in three stages (cut, palette, encode) and shrink
-  automatically (resolution, then frame rate) until they fit the size cap;
-  if even the lowest rung exceeds the cap the job fails with an error.
+- GIFs are built in three stages (cut, palette, encode); the sharable
+  copy shrinks automatically (resolution, then frame rate) until it fits
+  the size cap, and the job fails with an error if even the lowest rung
+  exceeds it. The full-res copy has no cap and can be large (a 10s 1080p
+  GIF is easily 100 MB+).
+- Animated AVIF needs an ffmpeg with an AV1 encoder (`libsvtav1` is
+  preferred, `libaom-av1` is the fallback); without one the AVIF jobs
+  fail with a clear error and the MP4/GIF exports are unaffected. AVIF
+  encodes are slower than GIFs but far smaller at the same quality.
 - Session data (loaded videos, clip lists, job history) lives in
   `.data/`; running jobs are not resumable after a server restart.
 - The web UI needs a browser with `fetch` streaming for uploads; it is
@@ -160,6 +174,6 @@ and can be adjusted individually in the queue before export.
 - Check the browser console and the terminal running the dev server for
   errors.
 - `bun test` runs the unit test suite; `bunx tsc --noEmit` typechecks.
-- Job errors and warnings are shown in the floating exports panel (e.g. a
-  GIF that could not be shrunk to the cap).
+- Job errors and warnings are shown in the export view (e.g. a GIF that
+  could not be shrunk to the cap).
 - File issues to the repo's issue tracker.

@@ -6,7 +6,9 @@ docs live in README.md; keep the two in sync when behavior changes.
 ## What it is
 
 A local web app that cuts clips from local videos and exports them as MP4
-and/or GIF. Next.js 15 App Router, React 19, TypeScript, Tailwind v4
+and/or GIF and/or animated AVIF (GIF/AVIF in a full tier plus a
+size-capped sharable tier). Next.js 15 App Router, React 19, TypeScript,
+Tailwind v4
 (hand-rolled UI components, no component library). All ffmpeg work runs
 server-side via `child_process`; the browser only handles UI, preview
 frames, and download links.
@@ -18,16 +20,17 @@ The code is layered so that everything testable is pure:
 ```
 src/lib/times.ts    time parsing/formatting + frameAt + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
-src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps)
+src/lib/ladder.ts   GIF shrink ladder (resolution/runge + fps steps) + AVIF CRF ladder
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
-src/lib/args.ts     ffmpeg argument builders (mp4/gif stages/preview)
+src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
-src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress
+src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
+                    encoder probes (nvenc, avif)
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
 src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller)
 src/app/api/**      thin route handlers over store/runner
@@ -60,18 +63,23 @@ Key invariants:
   fps, hasAudio, videoKbit, formatKbit }` - probed once at load.
   `uploaded` marks files copied into `uploads/` (safe to delete).
 - `ClipSpec { id, note, start, end, crop, formats, audio, fps, quality,
-  gif }` - one clip. `quality { mode: "source" | "manual", kbit }`;
-  `gif { maxMB, maxEdge }`. Defaults in `types.ts:defaultClip()`.
+  anim }` - one clip. `formats` is a non-empty subset of
+  `"mp4" | "gif" | "avif"`. `quality { mode: "source" | "manual", kbit }`
+  applies to MP4; `anim { maxMB, maxEdge }` applies to the sharable
+  GIF/AVIF tier. Defaults in `types.ts:defaultClip()`.
 - `Job { id, videoId, videoName, clip, clipNo, status, progress, stage,
   outputs, error, warning, createdAt }` - `status` is queued/running/
-  done/error. `outputs` is an array of `{ kind: "mp4" | "gif", name, size }`
-  for files under `out/<videoId>/`.
+  done/error. `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
+  name, size, tier?: "full" | "sharable" }` for files under
+  `out/<videoId>/` (`name` may be a relative path like
+  `sharable/clip1-note.gif`; `tier` is absent on old jobs).
 
 ## Disk layout (all gitignored, created lazily)
 
 - `.data/videos.json`, `.data/jobs.json` - persisted session state.
 - `uploads/<videoId>/<name>` - uploaded files.
-- `out/<videoId>/clipN[-note].mp4|gif` - finished exports.
+- `out/<videoId>/clipN[-note].mp4|gif|avif` - finished exports (full
+  tier); sharable GIF/AVIF copies in `out/<videoId>/sharable/`.
 - `.tmp/<jobId>/` - per-job temp files, deleted in a `finally`.
 
 ## Export recipes (ported from the clipmaker skill)
@@ -87,15 +95,29 @@ Key invariants:
   clip keeps audio. After encoding, container+video durations are
   verified within 1.5 frames; one retry; a second miss becomes a
   `job.warning` (the file is kept).
-- **GIF** (never gif-from-VOD): stage 1 cuts an intermediate mp4 at
-  `<maxEdge>`p30 (same floored start as the MP4); stage 2 `palettegen`
-  (256 colors, `stats_mode=full`);
-  stage 3 encodes down the ladder (scale 1.0@30, 1.0@25, .75, .625, .5,
-  .375, .25@25) taking the first rung whose file is <= maxMB; an
-  emergency 0.1875@25 rung is tried last; if it still exceeds the cap
-  the job fails.
-- **Encoder choice** is probed once (`nvencAvailable()`, a 320x180
-  testsrc probe-encode, cached in-process).
+- **GIF / AVIF dual tier** (never gif/avif-from-VOD): one shared
+  full-res intermediate mp4 is cut first at the clip's frame (same
+  floored start as the MP4, crop applied, 30 fps) and feeds every tier.
+  Each clip with gif and/or avif selected ALWAYS produces two versions
+  per format: a **full** tier (full resolution - crop size if cropped,
+  else source size - uncapped, at the video root) and a **sharable**
+  tier (scaled to `anim.maxEdge`, capped at `anim.maxMB`, in
+  `sharable/`; sharable gif files carry the `-<maxEdge>` edge suffix).
+  - **GIF**: shared `palettegen` from the full-res cut (256 colors,
+    `stats_mode=full`); full tier = one stage-3 encode at full size@30,
+    no cap; sharable tier = the resolution/fps ladder (scale 1.0@30,
+    1.0@25, .75, .625, .5, .375, .25@25) taking the first rung whose
+    file is <= maxMB; an emergency 0.1875@25 rung is tried last; if it
+    still exceeds the cap the job fails.
+  - **AVIF**: full tier = one crf30 encode at full size, no cap;
+    sharable tier = CRF ladder (30, 34, 38, 42, 46, 50) with
+    `scaleTo=maxEdge`, first file <= maxMB wins; emergency crf54 rung
+    last; still over = job fails.
+- **Encoder choice** is probed once per kind and cached in-process:
+  `nvencAvailable()` (a 320x180 testsrc probe-encode) and
+  `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
+  `libsvtav1` preferred, `libaom-av1` fallback; null when neither works
+  - AVIF jobs then fail with a clear error, MP4/GIF unaffected).
 
 ## API
 
@@ -109,6 +131,8 @@ Key invariants:
 - `GET/PUT /api/videos/[id]/clips` - the video's project file: fetch
   the persisted clip list, or replace it (every clip validated through
   `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
+  GET re-runs stored rows through `toClip`, so legacy shapes (the old
+  `gif` key) self-migrate to `anim` on read.
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
   <=480px; `time` is floored to the frame grid, the same frame the
   export will cut at.
@@ -117,7 +141,10 @@ Key invariants:
   clip (`clipNo` = 1-based index).
 - `GET /api/jobs` (newest batch first, clip order within a batch),
   `DELETE /api/jobs` (clear finished),
-  `GET /api/jobs/[id]/file?k=mp4|gif` (attachment download).
+  `GET /api/jobs/[id]/file?k=mp4|gif|avif` (attachment download;
+  content-type per extension - `video/mp4`, `image/gif`, `image/avif`;
+  the filename header is the basename, so sharable outputs with a
+  relative `name` download cleanly).
 
 ## Frontend conventions
 
@@ -192,15 +219,31 @@ Key invariants:
   load finished) so the initial empty record never clobbers disk.
 - Layout: at `xl` and up the app fits the viewport (root `h-screen`, no
   page scroll): the Stage video box stretches to fill the left column,
-  the clip list scrolls inside ClipQueue. Exports render as a floating
-  toast stack (JobsPanel, fixed bottom-right, out of the layout flow)
-  so a running export never squashes the sidebar; it hides itself when
-  no job exists and scrolls past 50vh. Below `xl` it falls back to
-  page scroll and a 16:9 video box. Every flex level in the xl layout
-  chain (grid, left column, Stage root, video box) needs `min-h-0`:
+  the clip list scrolls inside ClipQueue. Export progress is not in the
+  layout flow at all: a front-and-center modal (ExportModal) with a
+  bottom-right pill (ExportPill) as its minimized form; both hide
+  themselves when no job exists. Below `xl` it falls back to page
+  scroll and a 16:9 video box. Every flex level in the xl layout chain
+  (grid, left column, Stage root, video box) needs `min-h-0`:
   without it the Stage's automatic min-size (driven by the `<video>`'s
   intrinsic 16:9 size) refuses to shrink and the timeline + crop
   preview overflow the fixed-height root.
+- **Export modal**: opens on export and auto-opens on an
+  inactive->active jobs transition (covers page reload mid-export).
+  While any job is active it cannot be dismissed - X / Esc / backdrop
+  minimize it to the pill ("✓ N done · M running show"), and it
+  reopens from the pill; once all jobs are settled, X / Esc / backdrop
+  close it. Header shows the overall percentage (mean over jobs); each
+  row shows a status chip, the stage text, a per-job bar, and the
+  finished outputs with a `sharable` chip. Footer: `clear finished`
+  (clears done/error jobs, closes the modal when nothing but success
+  remains) and `close`.
+- **OptionsPanel sections**: clip options are grouped into titled
+  sections (Note, In/Out, Formats, MP4 video, GIF / AVIF, Crop) with
+  progressive disclosure - the MP4 section (frame rate, audio,
+  quality) renders only when the clip's formats include mp4, and the
+  GIF / AVIF section (sharable size cap, sharable max edge) only when
+  gif/avif is selected.
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
@@ -223,11 +266,12 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 84 unit tests over the pure libs (times, bitrate,
+- `bun test` - 93 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips, jobs).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
-  requested range, expected fps, audio stream when expected, gif within
-  the size cap) and confirm `GET /api/videos/<id>/file` answers 206 for
-  a Range request.
+  requested range, expected fps, audio stream when expected, full-tier
+  gif/avif at source resolution uncapped, sharable tier at maxEdge
+  within the size cap, avif codec `av1`) and confirm
+  `GET /api/videos/<id>/file` answers 206 for a Range request.
