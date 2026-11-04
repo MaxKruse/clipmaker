@@ -159,14 +159,14 @@ describe("buildAvifArgs", () => {
     ]);
   });
 
-  test("sharable variant scales down to maxEdge", () => {
+  test("sharable rung: scale to the rung edge and fps filter", () => {
     expect(
-      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 42, encoder: "libsvtav1", scaleTo: 640 }),
+      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 29, encoder: "libsvtav1", scaleTo: 640, fps: 25 }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4",
-      "-vf", "scale=640:-2:flags=lanczos",
-      "-c:v", "libsvtav1", "-crf", "42", "-pix_fmt", "yuv420p",
+      "-vf", "scale=640:-2:flags=lanczos,fps=25",
+      "-c:v", "libsvtav1", "-crf", "29", "-pix_fmt", "yuv420p",
       "-an", "clip1.avif",
     ]);
   });

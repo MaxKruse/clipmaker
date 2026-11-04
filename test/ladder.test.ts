@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
-  avifEmergencyCrf,
-  buildAvifCrfLadder,
+  avifEmergencyRung,
+  buildAvifLadder,
   buildLadder,
   emergencyRung,
-  pickRungIndex,
 } from "../src/lib/ladder";
 
 describe("buildLadder", () => {
@@ -101,32 +100,26 @@ describe("emergencyRung", () => {
   });
 });
 
-describe("pickRungIndex", () => {
-  const sizes = [null, 62.3, 52.6, 32.3, 23.3, 15.2, 4.5]; // MB, first rung failed
-
-  test("first rung under cap wins", () => {
-    expect(pickRungIndex(sizes, 48)).toBe(3);
+describe("AVIF sharable ladder", () => {
+  test("CRF is the outer axis (25, 29, 33, 36); the fps/edge ping-pong grid is inner", () => {
+    const grid = buildLadder(1024, 30);
+    const ladder = buildAvifLadder(1024, 30);
+    expect(ladder.length).toBe(grid.length * 4);
+    expect(ladder.slice(0, grid.length)).toEqual(grid.map((r) => ({ ...r, crf: 25 })));
+    expect(ladder[12]).toEqual({ edge: 1024, fps: 30, crf: 29 });
+    expect(ladder[24]).toEqual({ edge: 1024, fps: 30, crf: 33 });
+    expect(ladder[36]).toEqual({ edge: 1024, fps: 30, crf: 36 });
+    expect(ladder[47]).toEqual({ edge: 256, fps: 25, crf: 36 });
   });
 
-  test("null sizes are skipped", () => {
-    expect(pickRungIndex([null, null, 10, 20], 48)).toBe(2);
+  test("fps steps scale with the anim fps", () => {
+    const ladder = buildAvifLadder(1024, 60);
+    expect(ladder[0]).toEqual({ edge: 1024, fps: 60, crf: 25 });
+    expect(ladder[1]).toEqual({ edge: 1024, fps: 50, crf: 25 });
   });
 
-  test("no rung under cap -> -1", () => {
-    expect(pickRungIndex([100, 200, 300], 48)).toBe(-1);
-  });
-
-  test("empty -> -1", () => {
-    expect(pickRungIndex([], 48)).toBe(-1);
-  });
-});
-
-describe("AVIF crf ladder", () => {
-  test("steps down from high quality to low (higher crf = smaller)", () => {
-    expect(buildAvifCrfLadder()).toEqual([30, 34, 38, 42, 46, 50]);
-  });
-
-  test("emergency crf is lower quality than the last rung", () => {
-    expect(avifEmergencyCrf()).toBe(54);
+  test("emergency is the best grid shape (maxEdge at anim fps) at crf40", () => {
+    expect(avifEmergencyRung(1024, 30)).toEqual({ edge: 1024, fps: 30, crf: 40 });
+    expect(avifEmergencyRung(256, 60)).toEqual({ edge: 256, fps: 60, crf: 40 });
   });
 });

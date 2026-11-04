@@ -11,7 +11,15 @@ import {
 } from "./args";
 import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
 import { avifEncoder, findBin, nvencAvailable, run, runProgress, streamDurations } from "./ffmpeg";
-import { avifEmergencyCrf, buildAvifCrfLadder, buildLadder, emergencyRung, evenFloor, type Rung } from "./ladder";
+import {
+  avifEmergencyRung,
+  buildAvifLadder,
+  buildLadder,
+  emergencyRung,
+  evenFloor,
+  type AvifRung,
+  type Rung,
+} from "./ladder";
 import { clipFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
@@ -253,8 +261,8 @@ async function gifSharableRung(
 
 /**
  * AVIF pipeline on the shared full-res temp cut: two outputs:
- *  - full tier: full resolution at the best CRF, no size cap;
- *  - sharable tier: scaled to the max edge, CRF ladder top-down, first
+ *  - full tier: full resolution at crf30, no size cap;
+ *  - sharable tier: the 3-axis ladder (fps, edge, crf) top-down, first
  *    rung under the cap wins, written into sharable/.
  * Slower than the GIF path but far better quality per byte.
  */
@@ -262,14 +270,15 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const { maxMB, maxEdge } = clip.anim;
+  const { fps, maxMB, maxEdge } = clip.anim;
   const encoder = await avifEncoder();
   if (!encoder) {
     throw new Error("this ffmpeg build has no AV1 encoder (needs libsvtav1 or libaom-av1) - re-export as mp4/gif");
   }
 
-  // Full tier: full resolution at the top CRF, no size cap.
-  const fullCrf = buildAvifCrfLadder()[0];
+  // Full tier: full resolution at crf30, no size cap (the sharable
+  // ladder's CRF range 25-36 is separate).
+  const fullCrf = 30;
   const full = path.join(tmp, "avif-full.avif");
   job.stage = `avif: full ${encoder} crf${fullCrf}`;
   await runProgress(
@@ -279,7 +288,10 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
     makePctSink(job),
   );
 
-  const winner = await avifSharableCrf(job, inter, maxEdge, maxMB, encoder, dur, tmp);
+  // The ladder never upscales: capped at the full tier's edge, so a crop
+  // (or source) narrower than maxEdge just keeps the best it has.
+  const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
+  const winner = await avifSharableRung(job, inter, Math.min(maxEdge, fullEdge), maxMB, fps, encoder, dur, tmp);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "avif");
@@ -288,7 +300,7 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
 
   job.stage = "avif: verify";
   const { container } = await streamDurations(path.join(shareDir, fullName));
-  if (Math.abs(container - dur) > 1.5 / 30) {
+  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
     job.warning = `avif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
   }
   job.outputs.push(
@@ -298,37 +310,38 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   store.updateJob(job);
 }
 
-/** Sharable-tier AVIF: CRF ladder at the max edge, first rung under the cap. */
-async function avifSharableCrf(
-  job: Job, inter: string, maxEdge: number, maxMB: number, encoder: AvifEncoder, dur: number, tmp: string,
-): Promise<{ file: string; crf: number }> {
+/** Sharable-tier AVIF: the 3-axis ladder (fps, edge, crf) top-down, first rung under the cap. */
+async function avifSharableRung(
+  job: Job, inter: string, maxEdge: number, maxMB: number, fps: number,
+  encoder: AvifEncoder, dur: number, tmp: string,
+): Promise<{ file: string; rung: AvifRung }> {
   const maxBytes = maxMB * 1024 * 1024;
-  const ladder = buildAvifCrfLadder();
+  const ladder = buildAvifLadder(maxEdge, fps);
   for (let i = 0; i < ladder.length; i++) {
-    const crf = ladder[i];
-    const f = path.join(tmp, `avif-crf${crf}.avif`);
-    job.stage = `avif: sharable crf${crf} (${i + 1}/${ladder.length})`;
+    const rung = ladder[i];
+    const f = path.join(tmp, `avif-${rung.crf}-${rung.edge}-${rung.fps}.avif`);
+    job.stage = `avif: sharable crf${rung.crf} ${rung.edge}p${rung.fps} (${i + 1}/${ladder.length})`;
     await runProgress(
       findBin("ffmpeg"),
-      buildAvifArgs({ in: inter, out: f, crf, encoder, scaleTo: maxEdge }),
+      buildAvifArgs({ in: inter, out: f, crf: rung.crf, encoder, scaleTo: rung.edge, fps: rung.fps }),
       dur,
       makePctSink(job),
     );
-    if (fs.statSync(f).size <= maxBytes) return { file: f, crf };
+    if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
   }
-  const crf = avifEmergencyCrf();
+  const e = avifEmergencyRung(maxEdge, fps);
   const f = path.join(tmp, "avif-emergency.avif");
-  job.stage = `avif: sharable crf${crf} (emergency)`;
+  job.stage = `avif: sharable crf${e.crf} ${e.edge}p${e.fps} (emergency)`;
   await runProgress(
     findBin("ffmpeg"),
-    buildAvifArgs({ in: inter, out: f, crf, encoder, scaleTo: maxEdge }),
+    buildAvifArgs({ in: inter, out: f, crf: e.crf, encoder, scaleTo: e.edge, fps: e.fps }),
     dur,
     makePctSink(job),
   );
   if (fs.statSync(f).size > maxBytes) {
     fs.rmSync(f, { force: true });
-    throw new Error(`avif exceeds the ${maxMB}MB cap even at crf${crf} - shorten the clip or raise the cap`);
+    throw new Error(`avif exceeds the ${maxMB}MB cap even at crf${e.crf} ${e.edge}p${e.fps} - shorten the clip or raise the cap`);
   }
-  return { file: f, crf };
+  return { file: f, rung: e };
 }

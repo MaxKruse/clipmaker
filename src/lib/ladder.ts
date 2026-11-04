@@ -36,30 +36,34 @@ export function emergencyRung(maxEdge: number, fps: number): Rung {
   return { edge: evenFloor(maxEdge * EMERGENCY_RATIO), fps: Math.max(1, Math.round(fps * FPS_STEP)) };
 }
 
-// AVIF (animated AV1) keeps the max-edge resolution and steps the AV1
-// CRF down instead of the pixel size: at equal byte budgets AV1 spends
-// its bits on detail, not on a smaller frame.
-const AVIF_CRF_STEPS = [30, 34, 38, 42, 46, 50];
-const AVIF_EMERGENCY_CRF = 54;
+// AVIF sharable ladder: the three quality axes, in order - fps (anim ->
+// 5/6 x anim), edge (the GIF ping-pong grid), then CRF (25 -> 36, the
+// recipe's step of 4, clamped at 36). The whole fps/edge grid is tried
+// at each CRF, top CRF first (AV1 spends its bits on detail, so a higher
+// CRF at full resolution usually beats a lower CRF at a smaller frame).
+const AVIF_CRF_STEPS = [25, 29, 33, 36];
+const AVIF_EMERGENCY_CRF = 40;
 
-/** AVIF crf ladder, best quality first (higher crf = smaller file). */
-export function buildAvifCrfLadder(): number[] {
-  return [...AVIF_CRF_STEPS];
-}
-
-/** Last-resort crf tried when every ladder rung exceeds the size cap. */
-export function avifEmergencyCrf(): number {
-  return AVIF_EMERGENCY_CRF;
+export interface AvifRung {
+  edge: number;
+  fps: number;
+  crf: number;
 }
 
 /**
- * Index of the first rung whose measured size fits under maxMB,
- * or -1 when nothing fits. null entries are skipped (failed rung).
+ * AVIF sharable ladder, highest quality first: the fps/edge ping-pong
+ * grid (same as GIF) at each CRF step, top CRF first. Edges stay even;
+ * maxEdge must already be capped by the crop/source width (no upscale).
  */
-export function pickRungIndex(sizesMB: (number | null)[], maxMB: number): number {
-  for (let i = 0; i < sizesMB.length; i++) {
-    const s = sizesMB[i];
-    if (s !== null && s <= maxMB) return i;
+export function buildAvifLadder(maxEdge: number, fps: number): AvifRung[] {
+  const rungs: AvifRung[] = [];
+  for (const crf of AVIF_CRF_STEPS) {
+    for (const r of buildLadder(maxEdge, fps)) rungs.push({ ...r, crf });
   }
-  return -1;
+  return rungs;
+}
+
+/** Last-resort AVIF rung: the best grid shape (max edge at anim fps) at the emergency CRF. */
+export function avifEmergencyRung(maxEdge: number, fps: number): AvifRung {
+  return { edge: maxEdge, fps, crf: AVIF_EMERGENCY_CRF };
 }
