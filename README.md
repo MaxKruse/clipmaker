@@ -79,11 +79,12 @@ For a production build: `bun run build && bun run start` (same port).
    A thin scrub bar sits directly under the video: click or drag it
    to jump anywhere; the active in/out range shows as a band.
 4. **Tune the export** - per clip: note, formats (mp4, gif, avif - any
-   combination), audio on/off, frame rate (25/30/60), MP4 quality
-   (matched to the source by default, or a manual bitrate), and for GIFs/
-   AVIFs a size cap (10/25/48 MB) plus a maximum edge length (256-1024 px)
-   for the sharable copy. The full-res original is always exported with
-   it, no cap.
+   combination), audio on/off, frame rate (MP4: 25/30/60, default 60;
+   GIF/AVIF: 15/20/25/30/60, default 30), MP4 quality (matched to the
+   source by default, or a manual bitrate), and for GIFs/AVIFs a size cap
+   (10/25/48 MB) plus a maximum edge length (256-1024 px) for the
+   sharable copy. The full-res original is always exported with it, no
+   cap.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -142,8 +143,9 @@ File format - one clip per line:
 - Blank lines are ignored and unparseable lines are skipped. Ranges are
   clamped to the video's length.
 
-Imported clips get the default settings (MP4 + GIF, audio on, 30 fps)
-and can be adjusted individually in the queue before export.
+Imported clips get the default settings (MP4 + GIF, audio on, MP4 at
+60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
+queue before export.
 
 ## Limitations
 
