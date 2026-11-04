@@ -68,8 +68,9 @@ Key invariants:
   frame rate; `quality { mode: "source" | "manual", kbit }` applies to
   MP4; `anim { fps, maxMB, maxEdge }` (fps default 30; 15/20/25/30/60)
   applies to GIF/AVIF - `fps` is the shared intermediate's frame rate
-  and the full tier's; `maxMB`/`maxEdge` cap the sharable tier.
-  Defaults in `types.ts:defaultClip()`.
+  and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
+  options 256-1440; the ladder is capped at the source/crop width and
+  never upscales). Defaults in `types.ts:defaultClip()`.
 - `Job { id, videoId, videoName, clip, clipNo, status, progress, stage,
   outputs, error, warning, createdAt }` - `status` is queued/running/
   done/error. `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
@@ -109,12 +110,13 @@ Key invariants:
   edge suffix).
   - **GIF**: shared `palettegen` from the full-res cut (256 colors,
     `stats_mode=full`); full tier = one stage-3 encode at full
-    size@anim.fps, no cap; sharable tier = the resolution/fps ladder
-    (edges = maxEdge x 1.0, 1.0, .75, .625, .5, .375, .25; fps = anim.fps
-    on the first rung, then 5/6 x anim.fps - i.e. the original 1.0@30,
-    1.0@25, .75@25, ... recipe at the 30 fps default) taking the first
-    rung whose file is <= maxMB; an emergency 0.1875-edge rung at the
-    stepped fps is tried last; if it still exceeds the cap the job fails.
+    size@anim.fps, no cap; sharable tier = the ping-pong quality ladder:
+    each edge step (maxEdge x 1.0, .75, .625, .5, .375, .25, even-floored,
+    capped at the full tier's edge so it never upscales) is tried at
+    anim.fps and then at 5/6 x anim.fps (the recipe's 30 -> 25), highest
+    quality first, taking the first rung whose file is <= maxMB; an
+    emergency 0.1875-edge rung at the stepped fps is tried last; if it
+    still exceeds the cap the job fails.
   - **AVIF**: full tier = one crf30 encode at full size, no cap;
     sharable tier = CRF ladder (30, 34, 38, 42, 46, 50) with
     `scaleTo=maxEdge`, first file <= maxMB wins; emergency crf54 rung
@@ -274,7 +276,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 98 unit tests over the pure libs (times, bitrate,
+- `bun test` - 100 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips, jobs, types).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;

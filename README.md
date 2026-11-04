@@ -82,9 +82,10 @@ For a production build: `bun run build && bun run start` (same port).
    combination), audio on/off, frame rate (MP4: 25/30/60, default 60;
    GIF/AVIF: 15/20/25/30/60, default 30), MP4 quality (matched to the
    source by default, or a manual bitrate), and for GIFs/AVIFs a size cap
-   (10/25/48 MB) plus a maximum edge length (256-1024 px) for the
-   sharable copy. The full-res original is always exported with it, no
-   cap.
+   (10/25/48 MB) plus a maximum edge length (256-1440 px) for the
+   sharable copy - it is never upscaled, so a crop smaller than the max
+   edge just keeps the best resolution it has. The full-res original is
+   always exported with it, no cap.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -97,7 +98,7 @@ For a production build: `bun run build && bun run start` (same port).
    raise it with the CLIPMAKER_CONCURRENCY env var). When you export, a
    front-and-center export view opens: an overall progress bar plus a
    progress bar and stage text per clip (e.g. `gif: sharable 512p25
-   (3/7)`), and download links for every finished file. While it is
+   (8/12)`), and download links for every finished file. While it is
    working you can minimize it to a small pill in the bottom-right
    corner ("show" reopens it); when everything is done it stays open
    with the outputs until you close it. Files are also written to
