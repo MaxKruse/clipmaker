@@ -1,6 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
 import { humanSize } from "@/lib/human";
+import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
 export function Spinner({ className = "size-4" }: { className?: string }) {
@@ -55,7 +57,7 @@ function JobRow({ job }: { job: Job }) {
             />
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            {job.stage && <span className="min-w-0 truncate font-mono text-[11px] text-muted">{job.stage}</span>}
+            {job.stage && <span className="min-w-0 truncate font-mono text-[11px] text-muted">{stageText(job.stage)}</span>}
             <span className="font-mono text-[11px] text-muted">{Math.round(job.pct * 100)}%</span>
           </div>
         </div>
@@ -85,9 +87,8 @@ function JobRow({ job }: { job: Job }) {
 
 interface Props {
   jobs: Job[];
-  onClose: () => void;
-  /** Present while any job is still moving: the modal offers minimize, not close. */
-  onMinimize?: () => void;
+  /** Reads "close" when all settled, "minimize" while any job is moving. */
+  onDismiss: () => void;
   onClear?: () => void;
 }
 
@@ -96,7 +97,21 @@ interface Props {
  * running (spinner, per-clip progress bars, stage text, overall bar) and
  * stays open with the finished outputs until the user closes it.
  */
-export function ExportModal({ jobs, onClose, onMinimize, onClear }: Props) {
+export function ExportModal({ jobs, onDismiss, onClear }: Props) {
+  // The modal is the topmost overlay: while it is mounted, Esc acts on
+  // the modal, not on what is underneath (the clip preview's Esc).
+  // Capture phase + stopPropagation keeps the key from reaching the
+  // Stage's window listener (bubble phase).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onDismiss();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onDismiss]);
+
   if (jobs.length === 0) return null;
   const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const done = jobs.filter((j) => j.status === "done");
@@ -107,7 +122,18 @@ export function ExportModal({ jobs, onClose, onMinimize, onClear }: Props) {
     jobs.reduce((s, j) => s + (j.status === "done" ? 1 : j.status === "error" ? 0 : j.pct), 0) / jobs.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={(e) => {
+        // Backdrop clicks only (a click inside the panel bubbles up
+        // with the panel's element as target).
+        if (e.target !== e.currentTarget) return;
+        // Don't let the page's inert-background click leave the clip
+        // preview too - the user only asked for the modal to go away.
+        e.stopPropagation();
+        onDismiss();
+      }}
+    >
       <div className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl">
         <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
           {!allSettled ? <Spinner className="size-5" /> : (
@@ -123,17 +149,9 @@ export function ExportModal({ jobs, onClose, onMinimize, onClear }: Props) {
               {done.length} done{failed.length > 0 ? ` · ${failed.length} failed` : ""} · {jobs.length} total
             </span>
           </div>
-          {allSettled ? (
-            <button className="btn" onClick={onClose}>
-              close
-            </button>
-          ) : (
-            onMinimize && (
-              <button className="btn" onClick={onMinimize}>
-                minimize
-              </button>
-            )
-          )}
+          <button className="btn" onClick={onDismiss}>
+            {allSettled ? "close" : "minimize"}
+          </button>
         </div>
 
         <div className="shrink-0 border-b border-border px-4 py-3">
