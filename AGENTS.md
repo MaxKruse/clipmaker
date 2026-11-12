@@ -3,6 +3,13 @@
 Technical documentation for agents working on this codebase. User-facing
 docs live in README.md; keep the two in sync when behavior changes.
 
+**UI changes require a README screenshot reshoot.** The README's "At a
+glance" section shows the use-case flow with the example cat video
+(`docs/screenshot-1-add.png` ... `docs/screenshot-4-main.png`). When a
+change alters the rendered interface (layout, components, labels,
+colors), reshoot all four screenshots with the same cat video and
+replace the PNGs, so the examples keep matching the live UI.
+
 ## What it is
 
 A local web app that cuts clips from local videos and exports them as MP4
