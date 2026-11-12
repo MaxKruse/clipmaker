@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { humanSize } from "@/lib/human";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
@@ -97,6 +98,20 @@ interface Props {
  * stays open with the finished outputs until the user closes it.
  */
 export function ExportModal({ jobs, onDismiss, onClear }: Props) {
+  // The modal is the topmost overlay: while it is mounted, Esc acts on
+  // the modal, not on what is underneath (the clip preview's Esc).
+  // Capture phase + stopPropagation keeps the key from reaching the
+  // Stage's window listener (bubble phase).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      onDismiss();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [onDismiss]);
+
   if (jobs.length === 0) return null;
   const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const done = jobs.filter((j) => j.status === "done");
@@ -107,7 +122,18 @@ export function ExportModal({ jobs, onDismiss, onClear }: Props) {
     jobs.reduce((s, j) => s + (j.status === "done" ? 1 : j.status === "error" ? 0 : j.pct), 0) / jobs.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={(e) => {
+        // Backdrop clicks only (a click inside the panel bubbles up
+        // with the panel's element as target).
+        if (e.target !== e.currentTarget) return;
+        // Don't let the page's inert-background click leave the clip
+        // preview too - the user only asked for the modal to go away.
+        e.stopPropagation();
+        onDismiss();
+      }}
+    >
       <div className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl">
         <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
           {!allSettled ? <Spinner className="size-5" /> : (
