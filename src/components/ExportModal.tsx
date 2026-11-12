@@ -86,9 +86,8 @@ function JobRow({ job }: { job: Job }) {
 
 interface Props {
   jobs: Job[];
-  onClose: () => void;
-  /** Present while any job is still moving: the modal offers minimize, not close. */
-  onMinimize?: () => void;
+  /** Reads "close" when all settled, "minimize" while any job is moving. */
+  onDismiss: () => void;
   onClear?: () => void;
 }
 
@@ -97,7 +96,7 @@ interface Props {
  * running (spinner, per-clip progress bars, stage text, overall bar) and
  * stays open with the finished outputs until the user closes it.
  */
-export function ExportModal({ jobs, onClose, onMinimize, onClear }: Props) {
+export function ExportModal({ jobs, onDismiss, onClear }: Props) {
   if (jobs.length === 0) return null;
   const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
   const done = jobs.filter((j) => j.status === "done");
@@ -124,17 +123,9 @@ export function ExportModal({ jobs, onClose, onMinimize, onClear }: Props) {
               {done.length} done{failed.length > 0 ? ` · ${failed.length} failed` : ""} · {jobs.length} total
             </span>
           </div>
-          {allSettled ? (
-            <button className="btn" onClick={onClose}>
-              close
-            </button>
-          ) : (
-            onMinimize && (
-              <button className="btn" onClick={onMinimize}>
-                minimize
-              </button>
-            )
-          )}
+          <button className="btn" onClick={onDismiss}>
+            {allSettled ? "close" : "minimize"}
+          </button>
         </div>
 
         <div className="shrink-0 border-b border-border px-4 py-3">
