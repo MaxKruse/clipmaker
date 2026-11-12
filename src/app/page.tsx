@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { ClipQueue } from "@/components/ClipQueue";
 import { CropPreview } from "@/components/CropPreview";
 import type { Aspect } from "@/components/CropOverlay";
@@ -12,6 +12,7 @@ import { Timeline } from "@/components/Timeline";
 import { useExportView } from "@/components/useExportView";
 import { VideoLoader } from "@/components/VideoLoader";
 import type { TxtClip } from "@/lib/clipsTxt";
+import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
 import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
 const freshDraft = (v: VideoInfo): ClipSpec => ({
@@ -23,23 +24,15 @@ export default function Page() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, ClipSpec[]>>({});
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Clip range the timeline frames (±5s margin) for fine in/out
-  // adjustment; set on clip select, cleared on leave/switch.
-  const [focus, setFocus] = useState<{ start: number; end: number } | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
-  // Position before a clip-preview jump; restored by clicking inert
-  // background, Esc, or the Back button in the transport row.
-  const [returnTo, setReturnTo] = useState<number | null>(null);
-  // The range is only "live" once the user sets it (timeline draw,
-  // I/O keys, In/Out inputs). Without a range, playback is free.
-  const [hasRange, setHasRange] = useState(false);
-  // Guided add-clip flow: 0 = idle, 1 = set the times (the timeline
-  // glows), 2 = optional crop (the player glows).
-  const [step, setStep] = useState<0 | 1 | 2>(0);
+  // The clip session: the previewed clip, the "back" position (restored
+  // by clicking inert background, Esc, or Back), the timeline focus, the
+  // live in/out range, and the guided add-clip step (transition rules in
+  // lib/clipSession.ts).
+  const [session, dispatch] = useReducer(clipSessionReducer, initialClipSession);
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -49,6 +42,8 @@ export default function Page() {
 
   const active = videos.find((v) => v.id === activeId) ?? null;
   const activeClips = active ? (clips[active.id] ?? []) : [];
+  const selectedId = session.clipId;
+  const hasRange = session.hasRange;
   const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
   // The export view: front-and-center modal while a batch runs,
   // minimizable to a corner pill (transition rules in lib/exportView.ts).
@@ -114,15 +109,11 @@ export default function Page() {
     const video = v ?? videos.find((x) => x.id === id);
     if (!video) return;
     setActiveId(id);
-    setSelectedId(null);
-    setFocus(null);
+    dispatch({ type: "video-changed" });
     setPlaying(false);
     setTime(0);
     setExportError(null);
     setDraft(freshDraft(video));
-    setReturnTo(null);
-    setHasRange(false);
-    setStep(0);
   };
 
   const onAdded = (v: VideoInfo) => {
@@ -144,8 +135,10 @@ export default function Page() {
     if (activeId === id) {
       if (rest[0]) selectVideo(rest[0].id);
       else {
+        // No video left: the work area unmounts, and the next select
+        // starts a fresh session anyway.
         setActiveId(null);
-        setReturnTo(null);
+        dispatch({ type: "video-changed" });
       }
     }
   };
@@ -162,7 +155,7 @@ export default function Page() {
     if (!v) return;
     if (p) {
       // Playing accepts the preview position as the new one.
-      setReturnTo(null);
+      dispatch({ type: "cancel-return" });
       void v.play();
     } else {
       v.pause();
@@ -181,8 +174,7 @@ export default function Page() {
   const updateDraft = (patch: Partial<ClipSpec>) => {
     // Guided flow: touching the times finishes the "set the times"
     // step; setting a crop finishes the optional crop step.
-    if (step === 1 && (patch.start !== undefined || patch.end !== undefined)) setStep(2);
-    if (step === 2 && patch.crop) setStep(0);
+    dispatch({ type: "patched", patch });
     setDraft((d) => ({ ...d, ...patch }));
     if (selectedId && activeId) {
       setClips((all) => ({
@@ -193,9 +185,8 @@ export default function Page() {
   };
 
   const setIn = (t: number) => {
-    setReturnTo(null);
+    dispatch({ type: "set-range" });
     seek(t);
-    setHasRange(true);
     const dur = active?.duration ?? t;
     const start = Math.max(0, Math.min(t, dur - 0.2));
     const end = Math.min(dur, Math.max(start + 0.2, draft.end));
@@ -203,9 +194,8 @@ export default function Page() {
   };
 
   const setOut = (t: number) => {
-    setReturnTo(null);
+    dispatch({ type: "set-range" });
     seek(t);
-    setHasRange(true);
     const dur = active?.duration ?? t;
     const end = Math.max(0.2, Math.min(t, dur));
     const start = Math.max(0, Math.min(draft.start, end - 0.2));
@@ -214,8 +204,7 @@ export default function Page() {
 
   // Timeline drag draws a new range (live while dragging).
   const onDraw = (a: number, b: number) => {
-    setReturnTo(null);
-    setHasRange(true);
+    dispatch({ type: "set-range" });
     const dur = active?.duration ?? b;
     const start = Math.max(0, Math.min(a, dur - 0.2));
     const end = Math.min(dur, Math.max(b, start + 0.2));
@@ -223,12 +212,20 @@ export default function Page() {
   };
 
   // Right-click on the range clears it (back to free playback).
-  const clearRange = () => setHasRange(false);
+  const clearRange = () => dispatch({ type: "clear-range" });
 
   const selectClip = (id: string) => {
     const c = activeClips.find((x) => x.id === id);
     if (!c) return;
-    setSelectedId(id);
+    // Jump to the clip's start for a preview; the session remembers
+    // where we were before the first jump so "back" can restore it.
+    dispatch({
+      type: "select-clip",
+      clipId: id,
+      start: c.start,
+      end: c.end,
+      playhead: videoRef.current?.currentTime ?? time,
+    });
     setDraft({
       ...c,
       formats: [...c.formats],
@@ -236,12 +233,6 @@ export default function Page() {
       anim: { ...c.anim },
       crop: c.crop ? { ...c.crop } : null,
     });
-    setHasRange(true);
-    setFocus({ start: c.start, end: c.end });
-    setStep(0);
-    // Jump to the clip's start for a preview; remember where we were
-    // before the first jump so "back" can restore it.
-    if (returnTo === null) setReturnTo(videoRef.current?.currentTime ?? time);
     seek(c.start);
   };
 
@@ -249,12 +240,8 @@ export default function Page() {
   // deselect the clip, and clear its range back to free playback.
   const leavePreview = () => {
     const v = videoRef.current;
-    if (returnTo !== null && v) v.currentTime = returnTo;
-    setReturnTo(null);
-    setSelectedId(null);
-    setFocus(null);
-    setHasRange(false);
-    setStep(0);
+    if (session.returnTo !== null && v) v.currentTime = session.returnTo;
+    dispatch({ type: "leave-preview" });
     if (active) setDraft(freshDraft(active));
   };
 
@@ -262,7 +249,7 @@ export default function Page() {
   // Esc. Clicks on the clips list, the player (stage + timeline), and
   // any control count as "doing something else".
   useEffect(() => {
-    if (returnTo === null) return;
+    if (session.returnTo === null) return;
     const onDocClick = (e: MouseEvent) => {
       const el = e.target;
       if (
@@ -274,7 +261,7 @@ export default function Page() {
     };
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
-  }, [returnTo]);
+  }, [session.returnTo]);
 
   // Start the add-clip flow: the clip is created immediately - at the
   // live range if there is one, otherwise as a short window at the
@@ -296,9 +283,7 @@ export default function Page() {
     }
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), c] }));
     setDraft({ ...c, formats: [...c.formats], quality: { ...c.quality }, anim: { ...c.anim }, crop: c.crop ? { ...c.crop } : null });
-    setSelectedId(c.id);
-    setHasRange(true);
-    setStep(hasRange ? 2 : 1);
+    dispatch({ type: "add-clip", clipId: c.id });
   };
 
   // Add parsed clip ranges (from a Clips .txt) to the active video,
@@ -314,7 +299,7 @@ export default function Page() {
       .filter((c) => c.start < active.duration && c.end - c.start > 0.2);
     if (!list.length) return;
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), ...list] }));
-    setStep(0);
+    dispatch({ type: "imported" });
   };
 
   const deleteClip = (id: string) => {
@@ -323,12 +308,7 @@ export default function Page() {
     setClips((all) => ({ ...all, [activeId]: rest }));
     if (selectedId === id) {
       if (rest[0]) selectClip(rest[0].id);
-      else {
-        setSelectedId(null);
-        setFocus(null);
-        setHasRange(false);
-        setStep(0);
-      }
+      else dispatch({ type: "deselect" });
     }
   };
 
@@ -407,9 +387,9 @@ export default function Page() {
               onIn={setIn}
               onOut={setOut}
               onCropChange={(c) => updateDraft({ crop: c })}
-              returnTo={returnTo}
+              returnTo={session.returnTo}
               onBack={leavePreview}
-              glow={step === 2}
+              glow={session.step === "crop"}
             />
             <Timeline
               duration={active.duration}
@@ -417,7 +397,7 @@ export default function Page() {
               inPoint={hasRange ? draft.start : null}
               outPoint={hasRange ? draft.end : null}
               onScrub={(t) => {
-                setReturnTo(null);
+                dispatch({ type: "cancel-return" });
                 seek(t);
               }}
               onIn={setIn}
@@ -425,8 +405,8 @@ export default function Page() {
               onMoveSel={(a, b) => updateDraft({ start: a, end: b })}
               onDraw={onDraw}
               onClearRange={clearRange}
-              glow={step === 1}
-              focus={focus}
+              glow={session.step === "set-times"}
+              focus={session.focus}
             />
             <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
           </div>
