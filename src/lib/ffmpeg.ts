@@ -120,6 +120,16 @@ export function runProgress(
   return promise;
 }
 
+/**
+ * Memoize a one-shot async probe: `fn` runs exactly once per process
+ * (concurrent callers share the in-flight promise) and its result -
+ * including a rejection - is cached for the process lifetime.
+ */
+export function once<T>(fn: () => Promise<T>): () => Promise<T> {
+  let p: Promise<T> | null = null;
+  return () => (p ??= fn());
+}
+
 /** Parse a rational fps string like "30000/1001" -> 29.97. */
 export function parseFpsRate(rate: string): number {
   const m = rate.match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -200,64 +210,56 @@ export async function streamDurations(file: string): Promise<{ container: number
   };
 }
 
-let nvencPromise: Promise<boolean> | null = null;
-
 /**
  * Probe-encode 0.5s of testsrc at 320x180 with h264_nvenc. 320x180, not 64x64:
  * some drivers reject tiny frames even when nvenc works at real sizes.
+ * Probed once per process; the result is shared.
  */
-export function nvencAvailable(): Promise<boolean> {
-  nvencPromise ??= (async () => {
-    try {
-      await run(
-        findBin("ffmpeg"),
-        [
-          "-hide_banner", "-loglevel", "error",
-          "-f", "lavfi", "-i", "testsrc=duration=0.5:size=320x180:rate=30",
-          "-c:v", "h264_nvenc", "-f", "null", "-",
-        ],
-        90_000,
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  })();
-  return nvencPromise;
-}
+export const nvencAvailable = once(async (): Promise<boolean> => {
+  try {
+    await run(
+      findBin("ffmpeg"),
+      [
+        "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-i", "testsrc=duration=0.5:size=320x180:rate=30",
+        "-c:v", "h264_nvenc", "-f", "null", "-",
+      ],
+      90_000,
+    );
+    return true;
+  } catch {
+    return false;
+  }
+});
 
 export type AvifEncoder = "libsvtav1" | "libaom-av1";
-
-let avifPromise: Promise<AvifEncoder | null> | null = null;
 
 /**
  * Probe-encode 0.5s of testsrc into a real .avif, preferring libsvtav1
  * (best quality per encode-second) and falling back to libaom-av1
  * (slow, but present in more builds). Null when the ffmpeg build has
- * no usable AV1 encoder at all.
+ * no usable AV1 encoder at all. Probed once per process; the result
+ * is shared.
  */
-export function avifEncoder(): Promise<AvifEncoder | null> {
-  avifPromise ??= (async () => {
-    for (const enc of ["libsvtav1", "libaom-av1"] as const) {
-      const probe = path.join(os.tmpdir(), `clipmaker-avif-probe-${enc}.avif`);
-      try {
-        await run(
-          findBin("ffmpeg"),
-          [
-            "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
-            "-f", "lavfi", "-i", "testsrc=duration=0.5:size=320x180:rate=10",
-            "-c:v", enc, "-pix_fmt", "yuv420p", probe,
-          ],
-          90_000,
-        );
-        return enc;
-      } catch {
-        // this encoder is missing or broken; try the next one
-      } finally {
-        fs.rmSync(probe, { force: true });
-      }
+export const avifEncoder = once(async (): Promise<AvifEncoder | null> => {
+  for (const enc of ["libsvtav1", "libaom-av1"] as const) {
+    const probe = path.join(os.tmpdir(), `clipmaker-avif-probe-${enc}.avif`);
+    try {
+      await run(
+        findBin("ffmpeg"),
+        [
+          "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+          "-f", "lavfi", "-i", "testsrc=duration=0.5:size=320x180:rate=10",
+          "-c:v", enc, "-pix_fmt", "yuv420p", probe,
+        ],
+        90_000,
+      );
+      return enc;
+    } catch {
+      // this encoder is missing or broken; try the next one
+    } finally {
+      fs.rmSync(probe, { force: true });
     }
-    return null;
-  })();
-  return avifPromise;
-}
+  }
+  return null;
+});

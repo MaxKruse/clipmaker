@@ -10,7 +10,7 @@ import {
   type Mp4Encoder,
 } from "./args";
 import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
-import { avifEncoder, findBin, nvencAvailable, run, runProgress, streamDurations } from "./ffmpeg";
+import { avifEncoder, findBin, nvencAvailable, once, run, runProgress, streamDurations } from "./ffmpeg";
 import {
   avifEmergencyRung,
   buildAvifLadder,
@@ -31,12 +31,11 @@ import type { Job, VideoInfo } from "./types";
 const CONCURRENCY = Math.max(1, Number(process.env.CLIPMAKER_CONCURRENCY) || 2);
 const queue: Job[] = [];
 const running = new Set<Job>();
-let encoderPromise: Promise<Mp4Encoder> | null = null;
 
-export function pickEncoder(): Promise<Mp4Encoder> {
-  encoderPromise ??= nvencAvailable().then((ok) => (ok ? "h264_nvenc" : "libx264"));
-  return encoderPromise;
-}
+/** MP4 encoder choice, probed once per process (nvenc when available). */
+export const pickEncoder = once(async (): Promise<Mp4Encoder> =>
+  (await nvencAvailable()) ? "h264_nvenc" : "libx264",
+);
 
 export function enqueue(job: Job) {
   store.addJob(job);
