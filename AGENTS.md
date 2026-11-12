@@ -235,8 +235,9 @@ Key invariants:
   only resets via double-click/fit or a video switch. Returning is by
   clicking inert background (a document-level click listener ignores
   `closest("[data-clips-panel], [data-clip-options], [data-player],
-  textarea)"), pressing `Esc`, or the back button in the Stage transport
-  row. Leaving the preview also deselects the clip and clears its
+  textarea)"), pressing `Esc` (only while the export modal is closed -
+  the modal captures Esc first), or the back button in the Stage
+  transport row. Leaving the preview also deselects the clip and clears its
   range (back to free playback). Playing, setting in/out, scrubbing,
   and switching/removing the video clear the pending return.
 - Times in the clip list and the timeline in/out chip are shown with
@@ -262,16 +263,19 @@ Key invariants:
 - **Export modal**: the view is the `exportView` reducer (modal |
   pill; with no jobs nothing renders). It opens on export and
   auto-opens on an inactive->active jobs transition (covers page
-  reload mid-export). The header button is the only dismiss: it reads
-  `minimize` while any job is active (to the pill, "✓ N done · M
-  running show") and `close` once settled; the pill's `show` reopens
-  it. There is deliberately no Esc / backdrop dismiss - Esc belongs to
-  the clip preview. Header shows the overall percentage (mean over
-  jobs); each row shows a status chip, the stage text, a per-job bar,
-  and the finished outputs with a `sharable` chip. Footer: `clear
-  finished` (shown only when settled with at least one done; clears
-  done/error jobs and dismisses the view when nothing but success
-  remains).
+  reload mid-export). While the modal is open it is the topmost
+  layer: the header button (reads `minimize` while any job is active,
+  `close` once settled), `Esc`, and a backdrop click all dismiss it
+  (to the pill, "✓ N done · M running show", whose `show` reopens it).
+  The modal captures both so they do not leak to the clip preview
+  underneath (capture-phase keydown with `stopPropagation`; the
+  backdrop click also stops the page's inert-background click):
+  while the modal is open, Esc does not leave the preview. Header
+  shows the overall percentage (mean over jobs); each row shows a
+  status chip, the stage text, a per-job bar, and the finished outputs
+  with a `sharable` chip. Footer: `clear finished` (shown only when
+  settled with at least one done; clears done/error jobs and dismisses
+  the view when nothing but success remains).
 - **OptionsPanel sections**: clip options are grouped into titled
   sections (Note, In/Out, Formats, MP4 video, GIF / AVIF, Crop) with
   progressive disclosure - the MP4 section (frame rate, audio,
