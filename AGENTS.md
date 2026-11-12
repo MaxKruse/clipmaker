@@ -26,16 +26,21 @@ src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
+src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
+src/lib/exportView.ts export view state machine (modal | pill)
+src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
 src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
 src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
-                    encoder probes (nvenc, avif)
+                    encoder probes (nvenc, avif; one-shot via once())
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
 src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller)
 src/app/api/**      thin route handlers over store/runner
-src/components/**   UI, all "use client"
-src/app/page.tsx    page state owner (videos, clips, draft, jobs polling)
+src/components/**   UI, all "use client"; useExportView.ts is the thin hook
+                    around the exportView reducer
+src/app/page.tsx    page state owner (videos, clips, draft, jobs polling); the
+                    export view and clip session run as explicit machines
 ```
 
 Key invariants:
@@ -56,6 +61,11 @@ Key invariants:
 - **Progress events use `-progress pipe:1`**; both `run` and
   `runProgress` in ffmpeg.ts parse it. `runProgress` takes the expected
   total duration and reports 0..100.
+- **Job stages are structured, not free strings.** The runner builds
+  `JobStage` objects (stages.ts); the export modal renders them through
+  `stageText`, whose wording is pinned by `test/stages.test.ts`.
+  jobs.json rows with a legacy string stage migrate to null on load
+  (store.ts:loadJobs).
 
 ## Data model
 
@@ -71,9 +81,11 @@ Key invariants:
   and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
   options 256-1440; the ladder is capped at the source/crop width and
   never upscales). Defaults in `types.ts:defaultClip()`.
-- `Job { id, videoId, videoName, clip, clipNo, status, progress, stage,
-  outputs, error, warning, createdAt }` - `status` is queued/running/
-  done/error. `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
+- `Job { id, videoId, videoName, clip, clipNo, status, stage, pct,
+  outputs, warning?, error?, createdAt }` - `status` is queued/running/
+  done/error. `stage` is the structured `JobStage` (stages.ts) while
+  running, null when settled; the modal renders it via `stageText`.
+  `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
   name, size, tier?: "full" | "sharable" }` for files under
   `out/<videoId>/` (`name` may be a relative path like
   `sharable/clip1-note.gif`; `tier` is absent on old jobs).
@@ -159,24 +171,30 @@ Key invariants:
 
 ## Frontend conventions
 
-- `page.tsx` owns all state; components are presentational. The
-  **draft model**: a single working `ClipSpec` that mirrors the selected
-  committed clip (`updateDraft` writes to both); selecting a clip loads
-  it into the draft, so every draft change edits the clip in place.
-  The **in/out range is optional** (`hasRange` in page.tsx): a fresh
-  video starts with none, so playback is free. A range becomes live via
+- `page.tsx` owns all state; components are presentational. Two
+  machines are explicit reducers in lib/ (pure, unit-tested): the
+  **export view** (`exportView.ts`, consumed through `useExportView`)
+  and the **clip session** (`clipSession.ts`, consumed through a
+  `useReducer` in page.tsx: previewed clip, back position, timeline
+  focus, live range, guided flow step). The **draft model**: a single
+  working `ClipSpec` that mirrors the selected committed clip
+  (`updateDraft` writes to both); selecting a clip loads it into the
+  draft, so every draft change edits the clip in place. The
+  **in/out range is optional** (`session.hasRange`): a fresh video
+  starts with none, so playback is free. A range becomes live via
   a timeline drag, I/O, the In/Out inputs, adding a clip, or selecting
   one. Playback loops the range only while one is live.
-- **Add-clip flow** (guided; `step` state in page.tsx: 0 idle, 1 set
-  times, 2 crop): "Add clip" is always enabled and glows (`.attn`)
-  while no clip is selected. It creates the clip immediately - at the
-  live range if there is one, otherwise a 5s window at the playhead -
-  and selects it. Step 1 glows the Timeline with a hint chip; step 2
-  glows the Stage. `updateDraft` advances the flow: a patch touching
-  start/end goes 1 -> 2, a crop patch goes 2 -> 0. Esc/inert click/back,
-  selecting another clip, video switch, import, and delete reset to 0.
-  `.attn` is plain (unlayered) CSS in globals.css so it overrides the
-  layered component border colors.
+- **Add-clip flow** (guided; `step` in the clip session:
+  `"idle" | "set-times" | "crop"`): "Add clip" is always enabled and
+  glows (`.attn`) while no clip is selected. It creates the clip
+  immediately - at the live range if there is one, otherwise a 5s
+  window at the playhead - and selects it. `set-times` glows the
+  Timeline with a hint chip; `crop` glows the Stage. `updateDraft`
+  advances the flow: a patch touching start/end goes set-times ->
+  crop, a crop patch goes crop -> idle. Esc/inert click/back,
+  selecting another clip, video switch, import, and delete reset to
+  idle. `.attn` is plain (unlayered) CSS in globals.css so it overrides
+  the layered component border colors.
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
@@ -209,8 +227,8 @@ Key invariants:
   of importing the wrong VOD's clips. Imported clips are clamped to the
   video duration in `page.tsx:importClips`.
 - **Clip preview jump**: clicking a clip in the queue seeks the player to
-  the clip's start and stores the pre-jump position (`returnTo` in
-  page.tsx, kept across consecutive clip clicks). The timeline also
+  the clip's start and stores the pre-jump position (`session.returnTo`
+  in the clip session, kept across consecutive clip clicks). The timeline also
   frames the clip with 5s of margin on each side (`focus` prop,
   `focusWindow` in times.ts) so the in/out points can be fine-tuned on
   the track; the focus is cleared on leave/switch and the view itself
@@ -241,16 +259,19 @@ Key invariants:
   the layout flow at all: a front-and-center modal (ExportModal) with
   a bottom-right pill (ExportPill) as its minimized form; both hide
   themselves when no job exists.
-- **Export modal**: opens on export and auto-opens on an
-  inactive->active jobs transition (covers page reload mid-export).
-  While any job is active it cannot be dismissed - X / Esc / backdrop
-  minimize it to the pill ("✓ N done · M running show"), and it
-  reopens from the pill; once all jobs are settled, X / Esc / backdrop
-  close it. Header shows the overall percentage (mean over jobs); each
-  row shows a status chip, the stage text, a per-job bar, and the
-  finished outputs with a `sharable` chip. Footer: `clear finished`
-  (clears done/error jobs, closes the modal when nothing but success
-  remains) and `close`.
+- **Export modal**: the view is the `exportView` reducer (modal |
+  pill; with no jobs nothing renders). It opens on export and
+  auto-opens on an inactive->active jobs transition (covers page
+  reload mid-export). The header button is the only dismiss: it reads
+  `minimize` while any job is active (to the pill, "✓ N done · M
+  running show") and `close` once settled; the pill's `show` reopens
+  it. There is deliberately no Esc / backdrop dismiss - Esc belongs to
+  the clip preview. Header shows the overall percentage (mean over
+  jobs); each row shows a status chip, the stage text, a per-job bar,
+  and the finished outputs with a `sharable` chip. Footer: `clear
+  finished` (shown only when settled with at least one done; clears
+  done/error jobs and dismisses the view when nothing but success
+  remains).
 - **OptionsPanel sections**: clip options are grouped into titled
   sections (Note, In/Out, Formats, MP4 video, GIF / AVIF, Crop) with
   progressive disclosure - the MP4 section (frame rate, audio,
@@ -267,7 +288,8 @@ Key invariants:
   when the binary is absent (routes return a clean error, no crash).
 - A server restart marks running/queued jobs as errored ("server
   restarted before the job finished") - temp files in `.tmp/` of a dead
-  job are orphaned and can be removed.
+  job are orphaned and can be removed. On the same load, legacy
+  jobs.json rows with a string `stage` migrate to null.
 - Uploads stream straight from `req.body` (Web stream reader) into the
   destination file with `once(ws, "drain")` backpressure - do not buffer
   the body in memory.
@@ -279,8 +301,9 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 97 unit tests over the pure libs (times, bitrate,
-  ladder, names, crop, args, clipsTxt, clips, jobs, types).
+- `bun test` - 121 unit tests over the pure libs (times, bitrate,
+  ladder, names, crop, args, clipsTxt, clips, jobs, stages, exportView,
+  clipSession, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
