@@ -1,4 +1,5 @@
 import type { CropBox } from "./crop";
+import type { JobStage } from "./stages";
 
 export type Format = "mp4" | "gif" | "avif";
 
@@ -64,7 +65,7 @@ export interface Job {
   /** 1-based clip number used for output naming. */
   clipNo: number;
   status: JobStatus;
-  stage: string | null;
+  stage: JobStage | null;
   pct: number;
   outputs: JobOutput[];
   warning?: string;

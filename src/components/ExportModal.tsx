@@ -1,6 +1,7 @@
 "use client";
 
 import { humanSize } from "@/lib/human";
+import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
 export function Spinner({ className = "size-4" }: { className?: string }) {
@@ -55,7 +56,7 @@ function JobRow({ job }: { job: Job }) {
             />
           </div>
           <div className="flex items-baseline justify-between gap-2">
-            {job.stage && <span className="min-w-0 truncate font-mono text-[11px] text-muted">{job.stage}</span>}
+            {job.stage && <span className="min-w-0 truncate font-mono text-[11px] text-muted">{stageText(job.stage)}</span>}
             <span className="font-mono text-[11px] text-muted">{Math.round(job.pct * 100)}%</span>
           </div>
         </div>

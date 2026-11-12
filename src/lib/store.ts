@@ -51,6 +51,9 @@ class Store {
         j.stage = null;
         j.error = "server restarted before the job finished";
       }
+      // Legacy jobs.json rows carry the stage as a free string; the
+      // structured JobStage replaced it. The error text keeps the context.
+      if (typeof j.stage === "string") j.stage = null;
       this.jobs.set(j.id, j);
     }
   }
