@@ -423,6 +423,7 @@ export default function Page() {
               glow={session.step === "crop"}
             />
             <Timeline
+              key={active.id}
               duration={active.duration}
               time={time}
               inPoint={hasRange ? draft.start : null}
