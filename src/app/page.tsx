@@ -239,6 +239,9 @@ export default function Page() {
   // Leaving a clip preview: restore the previous position (if any),
   // deselect the clip, and clear its range back to free playback.
   const leavePreview = () => {
+    // Esc and Back are preview controls: with no clip under preview there
+    // is nothing to leave, and the draft's in/out must survive the keypress.
+    if (session.clipId === null) return;
     const v = videoRef.current;
     if (session.returnTo !== null && v) v.currentTime = session.returnTo;
     dispatch({ type: "leave-preview" });
