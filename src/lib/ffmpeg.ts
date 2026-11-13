@@ -121,13 +121,20 @@ export function runProgress(
 }
 
 /**
- * Memoize a one-shot async probe: `fn` runs exactly once per process
- * (concurrent callers share the in-flight promise) and its result -
- * including a rejection - is cached for the process lifetime.
+ * Memoize an async probe: concurrent callers share one in-flight attempt
+ * and its resolution; a rejection is not cached, so the next call retries.
  */
 export function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let p: Promise<T> | null = null;
-  return () => (p ??= fn());
+  return () => {
+    if (p) return p;
+    const next = fn().catch((e) => {
+      if (p === next) p = null; // a failed probe is not cached
+      throw e;
+    });
+    p = next;
+    return next;
+  };
 }
 
 /** Parse a rational fps string like "30000/1001" -> 29.97. */
