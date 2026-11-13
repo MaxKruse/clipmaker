@@ -370,8 +370,9 @@ export default function Page() {
       .then((r) => r.json())
       .then((j: Job[]) => {
         setJobs(j);
-        // Nothing left worth showing -> back to the editor.
-        if (!j.some((x) => x.status === "error")) exportView.dismiss();
+        // The clear deletes every settled job, so the refetch is the
+        // running set or nothing: the modal has nothing left to show.
+        exportView.dismiss();
       })
       .catch(() => {});
   };
