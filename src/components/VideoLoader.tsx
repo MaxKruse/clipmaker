@@ -84,7 +84,7 @@ export function VideoLoader({
     }
     setMsg(null);
     try {
-      const { sections } = parseClipsTxt(await f.text());
+      const { sections, skipped } = parseClipsTxt(await f.text());
       const withClips = sections.filter((s) => s.clips.length > 0);
       if (withClips.length === 0) {
         fail(`no clip ranges found in ${f.name}`);
@@ -103,8 +103,9 @@ export function VideoLoader({
         chosen = [hit];
       }
       const total = chosen.reduce((n, s) => n + s.clips.length, 0);
+      const extra = skipped > 0 ? ` (${skipped} line${skipped === 1 ? "" : "s"} skipped)` : "";
       onLoadClips(chosen.flatMap((s) => s.clips));
-      setMsg({ text: `imported ${total} clips from ${f.name}`, ok: true });
+      setMsg({ text: `imported ${total} clips from ${f.name}${extra}`, ok: true });
     } catch (e) {
       fail(e instanceof Error ? e.message : String(e));
     }
