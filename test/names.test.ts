@@ -50,3 +50,12 @@ describe("sanitizeNote", () => {
     expect(sanitizeNote("Ünïcödé-Clïp")).toBe("Ünïcödé-Clïp");
   });
 });
+
+describe("sanitizeNote code points", () => {
+  test("a truncation never splits an emoji into a lone surrogate", () => {
+    const emoji = "🎉"; // 2 code units, 1 code point
+    const out = sanitizeNote(emoji.repeat(65)); // 130 units, 65 points
+    expect(out).toBe(emoji.repeat(64));
+    expect(out.length).toBe(128);
+  });
+});

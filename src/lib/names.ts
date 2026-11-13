@@ -8,7 +8,8 @@ export function sanitizeNote(note: string): string {
     .replace(/[\u0000-\u001f]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return cleaned.slice(0, MAX_NOTE_LEN);
+  // Code points, not units: a 64-unit cut can split an emoji in half.
+  return [...cleaned].slice(0, MAX_NOTE_LEN).join("");
 }
 
 /**
