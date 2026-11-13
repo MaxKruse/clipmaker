@@ -81,3 +81,12 @@ describe("findOutput", () => {
     expect(findOutput(legacy, "gif", "sharable")?.name).toBe("sharable/clip1-512.gif");
   });
 });
+
+describe("sortJobs tie-break", () => {
+  test("equal timestamps order by clip number", () => {
+    const c3 = job("c", 3, 1000);
+    const c2 = job("b", 2, 1000);
+    const c1 = job("a", 1, 1000);
+    expect(sortJobs([c3, c2, c1]).map((j) => j.id)).toEqual(["a", "b", "c"]);
+  });
+});
