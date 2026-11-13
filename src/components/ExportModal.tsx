@@ -36,7 +36,8 @@ function StatusChip({ job }: { job: Job }) {
   );
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job, onCancel }: { job: Job; onCancel?: (id: string) => void }) {
+  const active = job.status === "queued" || job.status === "running";
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-panel2 p-3">
       <div className="flex items-center gap-2">
@@ -47,6 +48,11 @@ function JobRow({ job }: { job: Job }) {
             {f.toUpperCase()}
           </span>
         ))}
+        {active && onCancel && (
+          <button className="btn btn-sm btn-danger" onClick={() => onCancel(job.id)}>
+            cancel
+          </button>
+        )}
         <StatusChip job={job} />
       </div>
       {job.status === "running" && (
@@ -90,6 +96,8 @@ interface Props {
   /** Reads "close" when all settled, "minimize" while any job is moving. */
   onDismiss: () => void;
   onClear?: () => void;
+  /** Cancel a queued/running job by id (the cancel button in each row). */
+  onCancel?: (id: string) => void;
 }
 
 /**
@@ -97,7 +105,7 @@ interface Props {
  * running (spinner, per-clip progress bars, stage text, overall bar) and
  * stays open with the finished outputs until the user closes it.
  */
-export function ExportModal({ jobs, onDismiss, onClear }: Props) {
+export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
   // The modal is the topmost overlay: while it is mounted, Esc acts on
   // the modal, not on what is underneath (the clip preview's Esc).
   // Capture phase + stopPropagation keeps the key from reaching the
@@ -168,7 +176,7 @@ export function ExportModal({ jobs, onDismiss, onClear }: Props) {
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
           {jobs.map((j) => (
-            <JobRow key={j.id} job={j} />
+            <JobRow key={j.id} job={j} onCancel={onCancel} />
           ))}
         </div>
 

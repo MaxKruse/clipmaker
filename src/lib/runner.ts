@@ -10,7 +10,16 @@ import {
   type Mp4Encoder,
 } from "./args";
 import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
-import { avifEncoder, findBin, nvencAvailable, once, run, runProgress, streamDurations } from "./ffmpeg";
+import {
+  avifEncoder,
+  CancelledError,
+  findBin,
+  nvencAvailable,
+  once,
+  runProgress,
+  streamDurations,
+  type FfmpegHandle,
+} from "./ffmpeg";
 import {
   avifEmergencyRung,
   buildAvifLadder,
@@ -31,6 +40,57 @@ import type { Job, VideoInfo } from "./types";
 const CONCURRENCY = Math.max(1, Number(process.env.CLIPMAKER_CONCURRENCY) || 2);
 const queue: Job[] = [];
 const running = new Set<Job>();
+// Jobs the user asked to stop. A running job is flagged here (so a cancel
+// that lands between ffmpeg stages is caught at the next boundary) and its
+// in-flight child is killed via `handles`.
+const cancelled = new Set<string>();
+const handles = new Map<string, FfmpegHandle>();
+
+/**
+ * Encode timeout: at least 60s, and 120x the clip duration - a generous
+ * ceiling that only trips on a genuinely hung ffmpeg, freeing the pool.
+ */
+const encodeTimeout = (sec: number) => Math.max(60_000, Math.ceil(sec * 120_000));
+
+/**
+ * Run a tracked encode: registers the job's kill handle (so cancelJob can
+ * stop it), reports progress, and times out a hung ffmpeg. Awaits to
+ * completion like the old `await runProgress(...)`.
+ */
+function runTracked(job: Job, bin: string, args: string[], dur: number): Promise<void> {
+  const h = runProgress(bin, args, dur, makePctSink(job), encodeTimeout(dur));
+  handles.set(job.id, h);
+  return h.promise;
+}
+
+/** Abort a cancelled job at a stage boundary (no child to kill yet). */
+function throwIfCancelled(job: Job) {
+  if (cancelled.has(job.id)) throw new CancelledError();
+}
+
+/**
+ * Cancel a job. Queued jobs are dropped and marked cancelled; running jobs
+ * are flagged and their in-flight ffmpeg child is killed. Returns false for
+ * an unknown id or a job that has already settled.
+ */
+export function cancelJob(id: string): boolean {
+  const qi = queue.findIndex((j) => j.id === id);
+  if (qi >= 0) {
+    const job = queue.splice(qi, 1)[0];
+    job.status = "error";
+    job.stage = null;
+    job.error = "cancelled by user";
+    store.updateJob(job);
+    return true;
+  }
+  const inFlight = [...running].find((j) => j.id === id);
+  if (inFlight && inFlight.status === "running") {
+    cancelled.add(id);
+    handles.get(id)?.kill();
+    return true;
+  }
+  return false;
+}
 
 /** MP4 encoder choice, probed once per process (nvenc when available). */
 export const pickEncoder = once(async (): Promise<Mp4Encoder> =>
@@ -65,8 +125,15 @@ async function startJob(job: Job) {
     job.pct = 1;
   } catch (e) {
     job.status = "error";
-    job.error = e instanceof Error ? e.message : String(e);
+    job.error =
+      cancelled.has(job.id) || e instanceof CancelledError
+        ? "cancelled by user"
+        : e instanceof Error
+          ? e.message
+          : String(e);
   } finally {
+    cancelled.delete(job.id);
+    handles.delete(job.id);
     if (job.status !== "error") job.stage = null;
     store.updateJob(job);
     fs.rmSync(path.join(TMP_DIR, job.id), { recursive: true, force: true });
@@ -89,6 +156,7 @@ function makePctSink(job: Job) {
 async function runJob(job: Job) {
   const video = store.videos.get(job.videoId);
   if (!video) throw new Error("source video is no longer available");
+  throwIfCancelled(job);
   const tmp = path.join(TMP_DIR, job.id);
   fs.mkdirSync(tmp, { recursive: true });
   const outDir = path.join(OUT_DIR, job.videoId);
@@ -111,12 +179,13 @@ async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
+  throwIfCancelled(job);
   job.stage = { id: "anim-cut" };
-  await runProgress(
+  await runTracked(
+    job,
     findBin("ffmpeg"),
     buildGifStage1Args({ in: video.path, out: inter, start, dur, fps: clip.anim.fps, crop: clip.crop }),
     dur,
-    makePctSink(job),
   );
 }
 
@@ -136,6 +205,7 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
       ? Math.round(clip.quality.kbit)
       : targetVideoKbit(srcKbit, video.fps, clip.fps);
   const encoder = await pickEncoder();
+  throwIfCancelled(job);
   const outName = clipFileName(job.clipNo, clip.note, "mp4");
   const outPath = path.join(outDir, outName);
   const args = () =>
@@ -151,9 +221,9 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
       encoder,
     });
   job.stage = { id: "mp4-encode", encoder, kbit, fps: clip.fps };
-  await runProgress(findBin("ffmpeg"), args(), dur, makePctSink(job));
+  await runTracked(job, findBin("ffmpeg"), args(), dur);
   const warn = await checkDurationOrRetry(outPath, dur, clip.fps, job, () =>
-    runProgress(findBin("ffmpeg"), args(), dur, makePctSink(job)),
+    runTracked(job, findBin("ffmpeg"), args(), dur),
   );
   if (warn) job.warning = warn;
   job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size });
@@ -197,23 +267,24 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   const { fps, maxEdge, maxMB } = clip.anim;
   const pal = path.join(tmp, "pal.png");
 
+  throwIfCancelled(job);
   job.stage = { id: "gif-palette" };
-  await run(findBin("ffmpeg"), buildGifPaletteArgs({ in: inter, out: pal }));
+  await runTracked(job, findBin("ffmpeg"), buildGifPaletteArgs({ in: inter, out: pal }), dur);
 
   // Full tier: full resolution at the anim fps, no size cap.
   const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
   const full = path.join(tmp, "gif-full.gif");
   job.stage = { id: "gif-full", edge: fullEdge, fps };
-  await runProgress(
+  await runTracked(
+    job,
     findBin("ffmpeg"),
     buildGifStage3Args({ in: inter, pal, out: full, fps, edge: fullEdge }),
     dur,
-    makePctSink(job),
   );
 
   // The ladder never upscales: capped at the full tier's edge, so a crop
   // (or source) narrower than maxEdge just keeps the best it has.
-  const winner = await gifSharableRung(job, inter, pal, Math.min(maxEdge, fullEdge), maxMB, fps, tmp);
+  const winner = await gifSharableRung(job, inter, pal, Math.min(maxEdge, fullEdge), maxMB, fps, tmp, dur);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "gif");
@@ -235,22 +306,24 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
 
 /** Sharable-tier GIF: the quality ladder top-down, first rung under the cap. */
 async function gifSharableRung(
-  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, fps: number, tmp: string,
+  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, fps: number, tmp: string, dur: number,
 ): Promise<{ file: string; rung: Rung }> {
   const ladder = buildLadder(maxEdge, fps);
   const maxBytes = maxMB * 1024 * 1024;
   for (let i = 0; i < ladder.length; i++) {
+    throwIfCancelled(job);
     const rung = ladder[i];
     const f = path.join(tmp, `gif-${rung.edge}-${rung.fps}.gif`);
     job.stage = { id: "gif-rung", edge: rung.edge, fps: rung.fps, index: i + 1, total: ladder.length };
-    await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: rung.fps, edge: rung.edge }));
+    await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: rung.fps, edge: rung.edge }), dur);
     if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
   }
   const e = emergencyRung(maxEdge, fps);
   const f = path.join(tmp, "gif-emergency.gif");
   job.stage = { id: "gif-emergency", edge: e.edge, fps: e.fps };
-  await run(findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }));
+  throwIfCancelled(job);
+  await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }), dur);
   if (fs.statSync(f).size > maxBytes) {
     fs.rmSync(f, { force: true });
     throw new Error(`gif exceeds the ${maxMB}MB cap even at ${e.edge}px/${e.fps}fps - shorten the clip or raise the cap`);
@@ -274,17 +347,18 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   if (!encoder) {
     throw new Error("this ffmpeg build has no AV1 encoder (needs libsvtav1 or libaom-av1) - re-export as mp4/gif");
   }
+  throwIfCancelled(job);
 
   // Full tier: full resolution at crf30, no size cap (the sharable
   // ladder's CRF range 25-36 is separate).
   const fullCrf = 30;
   const full = path.join(tmp, "avif-full.avif");
   job.stage = { id: "avif-full", encoder, crf: fullCrf };
-  await runProgress(
+  await runTracked(
+    job,
     findBin("ffmpeg"),
     buildAvifArgs({ in: inter, out: full, crf: fullCrf, encoder }),
     dur,
-    makePctSink(job),
   );
 
   // The ladder never upscales: capped at the full tier's edge, so a crop
@@ -317,14 +391,15 @@ async function avifSharableRung(
   const maxBytes = maxMB * 1024 * 1024;
   const ladder = buildAvifLadder(maxEdge, fps);
   for (let i = 0; i < ladder.length; i++) {
+    throwIfCancelled(job);
     const rung = ladder[i];
     const f = path.join(tmp, `avif-${rung.crf}-${rung.edge}-${rung.fps}.avif`);
     job.stage = { id: "avif-rung", crf: rung.crf, edge: rung.edge, fps: rung.fps, index: i + 1, total: ladder.length };
-    await runProgress(
+    await runTracked(
+      job,
       findBin("ffmpeg"),
       buildAvifArgs({ in: inter, out: f, crf: rung.crf, encoder, scaleTo: rung.edge, fps: rung.fps }),
       dur,
-      makePctSink(job),
     );
     if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
@@ -332,11 +407,12 @@ async function avifSharableRung(
   const e = avifEmergencyRung(maxEdge, fps);
   const f = path.join(tmp, "avif-emergency.avif");
   job.stage = { id: "avif-emergency", crf: e.crf, edge: e.edge, fps: e.fps };
-  await runProgress(
+  throwIfCancelled(job);
+  await runTracked(
+    job,
     findBin("ffmpeg"),
     buildAvifArgs({ in: inter, out: f, crf: e.crf, encoder, scaleTo: e.edge, fps: e.fps }),
     dur,
-    makePctSink(job),
   );
   if (fs.statSync(f).size > maxBytes) {
     fs.rmSync(f, { force: true });

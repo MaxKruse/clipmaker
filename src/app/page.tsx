@@ -377,6 +377,16 @@ export default function Page() {
       .catch(() => {});
   };
 
+  const cancelOne = (id: string) => {
+    // Cancel the job server-side, then refresh so the row flips to the
+    // settled (error: "cancelled by user") state.
+    fetch(`/api/jobs/${id}`, { method: "DELETE" })
+      .then(() => fetch("/api/jobs"))
+      .then((r) => r.json())
+      .then((j: Job[]) => setJobs(j))
+      .catch(() => {});
+  };
+
   return (
     <div className="flex min-h-screen flex-col gap-3 p-4">
       <header className="flex flex-wrap items-baseline gap-3">
@@ -473,7 +483,7 @@ export default function Page() {
         </div>
       )}
       {exportView.view === "modal" && jobs.length > 0 ? (
-        <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} />
+        <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} onCancel={cancelOne} />
       ) : (
         <ExportPill jobs={jobs} onView={exportView.show} />
       )}
