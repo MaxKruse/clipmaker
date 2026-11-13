@@ -24,6 +24,9 @@ export default function Page() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, ClipSpec[]>>({});
+  // The video whose project file has loaded; gates the clip list so a
+  // switch never shows the previous video's clips.
+  const [clipsLoadedFor, setClipsLoadedFor] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
@@ -39,9 +42,26 @@ export default function Page() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The active video's clips are loaded from disk (save guard).
   const clipsReady = useRef<string | null>(null);
+  // Clips waiting to reach disk. The debounced timer is cleared when the
+  // save effect re-runs (a video switch), so the payload lives here and
+  // gets flushed on switch and on unload instead of being dropped.
+  const pendingSave = useRef<{ id: string; body: string } | null>(null);
+  const flushPendingSave = () => {
+    const p = pendingSave.current;
+    if (!p) return;
+    pendingSave.current = null;
+    fetch(`/api/videos/${p.id}/clips`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: p.body,
+      keepalive: true,
+    }).catch(() => {});
+  };
 
   const active = videos.find((v) => v.id === activeId) ?? null;
-  const activeClips = active ? (clips[active.id] ?? []) : [];
+  // The list for the video whose project file has actually loaded: a
+  // switch shows empty until the fetch lands, never the old video's clips.
+  const activeClips = active && clipsLoadedFor === active.id ? clips[active.id] ?? [] : [];
   const selectedId = session.clipId;
   const hasRange = session.hasRange;
   const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
@@ -83,10 +103,9 @@ export default function Page() {
         if (!alive) return;
         setClips((all) => ({ ...all, [id]: j.clips ?? [] }));
         clipsReady.current = id;
+        setClipsLoadedFor(id);
       })
-      .catch(() => {
-        if (alive) clipsReady.current = id;
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -94,16 +113,25 @@ export default function Page() {
 
   // Save the active video's clips, debounced after every change.
   useEffect(() => {
+    // A video switch clears the timer, so the pending payload would be
+    // dropped: when it belongs to the old video, send it now.
+    if (pendingSave.current && pendingSave.current.id !== activeId) flushPendingSave();
     if (!activeId || clipsReady.current !== activeId) return;
-    const h = setTimeout(() => {
-      fetch(`/api/videos/${activeId}/clips`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clips: clips[activeId] ?? [] }),
-      }).catch(() => {});
-    }, 500);
+    pendingSave.current = {
+      id: activeId,
+      body: JSON.stringify({ clips: clips[activeId] ?? [] }),
+    };
+    const h = setTimeout(flushPendingSave, 500);
     return () => clearTimeout(h);
   }, [clips, activeId]);
+
+  // A tab close takes the debounce timer with it, so flush what is still
+  // pending; keepalive lets the request outlive the document.
+  useEffect(() => {
+    const onLeave = () => flushPendingSave();
+    window.addEventListener("pagehide", onLeave);
+    return () => window.removeEventListener("pagehide", onLeave);
+  }, []);
 
   const selectVideo = (id: string, v?: VideoInfo) => {
     const video = v ?? videos.find((x) => x.id === id);
