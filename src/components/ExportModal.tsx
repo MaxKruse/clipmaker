@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { humanSize } from "@/lib/human";
+import { resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
@@ -70,10 +71,9 @@ function JobRow({ job }: { job: Job }) {
       {job.outputs.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {job.outputs.map((o) => {
-            const tier = o.tier ?? (o.name.includes("sharable") ? "sharable" : "full");
+            const tier = resolveTier(o);
             return (
-              <a key={o.name} className="btn btn-sm" href={`/api/jobs/${job.id}/file?k=${o.kind}`} download>
-                {tier === "sharable" && <span className="chip">sharable</span>}
+              <a key={o.name} className="btn btn-sm" href={`/api/jobs/${job.id}/file?k=${o.kind}&t=${tier}`} download>
                 <span className="font-mono">{o.name.split("/").pop()}</span>
                 <span className="text-muted">{humanSize(o.size)}</span>
               </a>

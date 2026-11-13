@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { sortJobs } from "../src/lib/jobs";
-import { defaultClip, type Job } from "../src/lib/types";
+import { findOutput, resolveTier, sortJobs } from "../src/lib/jobs";
+import { defaultClip, type Job, type JobOutput } from "../src/lib/types";
 
 const job = (id: string, clipNo: number, createdAt: number): Job => ({
   id,
@@ -13,6 +13,13 @@ const job = (id: string, clipNo: number, createdAt: number): Job => ({
   pct: 0,
   outputs: [],
   createdAt,
+});
+
+const out = (kind: JobOutput["kind"], name: string, tier?: JobOutput["tier"]): JobOutput => ({
+  kind,
+  name,
+  size: 1,
+  tier,
 });
 
 describe("sortJobs", () => {
@@ -45,5 +52,32 @@ describe("sortJobs", () => {
     const input = [a1, b1];
     sortJobs(input);
     expect(input.map((j) => j.id)).toEqual(["a1", "b1"]);
+  });
+});
+
+describe("findOutput", () => {
+  const outs = [
+    out("gif", "clip1-note.gif", "full"),
+    out("gif", "sharable/clip1-note-1024.gif", "sharable"),
+  ];
+
+  test("picks the requested tier, not the first output of the kind", () => {
+    expect(findOutput(outs, "gif", "sharable")?.name).toBe("sharable/clip1-note-1024.gif");
+    expect(findOutput(outs, "gif", "full")?.name).toBe("clip1-note.gif");
+  });
+
+  test("an unknown tier matches nothing", () => {
+    expect(findOutput(outs, "gif", "nope")).toBeUndefined();
+  });
+
+  test("a link without a tier keeps the first match (legacy links)", () => {
+    expect(findOutput(outs, "gif")?.name).toBe("clip1-note.gif");
+  });
+
+  test("legacy rows infer the tier from the sharable path", () => {
+    const legacy = [out("gif", "clip1.gif"), out("gif", "sharable/clip1-512.gif")];
+    expect(resolveTier(legacy[0])).toBe("full");
+    expect(resolveTier(legacy[1])).toBe("sharable");
+    expect(findOutput(legacy, "gif", "sharable")?.name).toBe("sharable/clip1-512.gif");
   });
 });
