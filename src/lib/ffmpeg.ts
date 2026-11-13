@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import type { AvifEncoder } from "./args";
 
 // Fallback locations when the binary is not on PATH (this machine).
 const BIN_FALLBACKS: Record<string, string> = {
@@ -238,8 +239,6 @@ export const nvencAvailable = once(async (): Promise<boolean> => {
     return false;
   }
 });
-
-export type AvifEncoder = "libsvtav1" | "libaom-av1";
 
 /**
  * Probe-encode 0.5s of testsrc into a real .avif, preferring libsvtav1
