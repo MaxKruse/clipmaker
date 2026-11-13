@@ -1,5 +1,5 @@
 import { normalizeCrop } from "./crop";
-import { newId, type ClipSpec } from "./types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, newId, type ClipSpec, type Format } from "./types";
 
 /** Sanitize an untrusted clip (JSON from the client) into a ClipSpec.
  * Throws with a human-readable message when the clip is unusable. */
@@ -12,11 +12,9 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
   // Allow a small overshoot: the element duration can differ from the probe's.
   end = Math.min(end, v.duration + 0.5);
   if (end - start < 0.2) throw new Error("clip must be at least 0.2s long");
-  const formats = (Array.isArray(r.formats) ? r.formats : []).filter(
-    (f: unknown) => f === "mp4" || f === "gif" || f === "avif",
-  );
+  const formats = (Array.isArray(r.formats) ? r.formats : []).filter((f: unknown) => FORMAT_OPTIONS.includes(f as Format));
   if (formats.length === 0) throw new Error("pick at least one format");
-  const fps = [25, 30, 60].includes(Number(r.fps)) ? Number(r.fps) : 60;
+  const fps = MP4_FPS_OPTIONS.includes(Number(r.fps)) ? Number(r.fps) : 60;
   const quality = {
     mode: r?.quality?.mode === "manual" ? ("manual" as const) : ("source" as const),
     kbit: Math.max(250, Math.round(Number(r?.quality?.kbit) || 0)),
@@ -24,9 +22,9 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
   // r.gif is the pre-avif key for the same options (old project files).
   const animRaw = r?.anim ?? r?.gif;
   const anim = {
-    fps: [15, 20, 25, 30, 60].includes(Number(animRaw?.fps)) ? Number(animRaw.fps) : 30,
-    maxMB: [10, 25, 48].includes(Number(animRaw?.maxMB)) ? Number(animRaw.maxMB) : 48,
-    maxEdge: [256, 512, 768, 1024, 1280, 1440].includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
+    fps: ANIM_FPS_OPTIONS.includes(Number(animRaw?.fps)) ? Number(animRaw.fps) : 30,
+    maxMB: ANIM_MAX_MB_OPTIONS.includes(Number(animRaw?.maxMB)) ? Number(animRaw.maxMB) : 48,
+    maxEdge: ANIM_MAX_EDGE_OPTIONS.includes(Number(animRaw?.maxEdge)) ? Number(animRaw.maxEdge) : 1024,
   };
   const crop = r?.crop && typeof r.crop === "object" ? normalizeCrop(v.width, v.height, r.crop) : null;
   return {
