@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ClipMaker",
+  title: "clipmaker",
   description: "Visual editor for cutting mp4 clips and gifs from local videos",
 };
 
