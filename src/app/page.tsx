@@ -13,6 +13,7 @@ import { useExportView } from "@/components/useExportView";
 import { VideoLoader } from "@/components/VideoLoader";
 import type { TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
+import { isActiveJob } from "@/lib/jobs";
 import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
 const freshDraft = (v: VideoInfo): ClipSpec => ({
@@ -64,7 +65,7 @@ export default function Page() {
   const activeClips = active && clipsLoadedFor === active.id ? clips[active.id] ?? [] : [];
   const selectedId = session.clipId;
   const hasRange = session.hasRange;
-  const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const activeJobs = jobs.filter(isActiveJob);
   // The export view: front-and-center modal while a batch runs,
   // minimizable to a corner pill (transition rules in lib/exportView.ts).
   const exportView = useExportView(activeJobs.length);

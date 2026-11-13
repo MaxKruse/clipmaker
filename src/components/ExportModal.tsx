@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { humanSize } from "@/lib/human";
-import { resolveTier } from "@/lib/jobs";
+import { isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
@@ -113,7 +113,7 @@ export function ExportModal({ jobs, onDismiss, onClear }: Props) {
   }, [onDismiss]);
 
   if (jobs.length === 0) return null;
-  const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const active = jobs.filter(isActiveJob);
   const done = jobs.filter((j) => j.status === "done");
   const failed = jobs.filter((j) => j.status === "error");
   const allSettled = active.length === 0;

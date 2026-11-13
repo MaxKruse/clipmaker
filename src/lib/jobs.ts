@@ -31,3 +31,21 @@ export function findOutput(outputs: JobOutput[], kind: string, tier?: string): J
 export function sortJobs(jobs: Job[]): Job[] {
   return [...jobs].sort((a, b) => b.createdAt - a.createdAt || a.clipNo - b.clipNo);
 }
+
+/** A job still occupying the export pool: queued or running. */
+export function isActiveJob(j: Job): boolean {
+  return j.status === "queued" || j.status === "running";
+}
+
+/** Status split for the modal header, the pill label, and the clear button. */
+export function jobCounts(jobs: Job[]): { active: number; done: number; failed: number } {
+  let active = 0;
+  let done = 0;
+  let failed = 0;
+  for (const j of jobs) {
+    if (isActiveJob(j)) active++;
+    else if (j.status === "error") failed++;
+    else done++;
+  }
+  return { active, done, failed };
+}

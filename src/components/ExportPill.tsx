@@ -1,5 +1,6 @@
 "use client";
 
+import { jobCounts } from "@/lib/jobs";
 import type { Job } from "@/lib/types";
 import { Spinner } from "./ExportModal";
 
@@ -10,9 +11,7 @@ import { Spinner } from "./ExportModal";
  */
 export function ExportPill({ jobs, onView }: { jobs: Job[]; onView: () => void }) {
   if (jobs.length === 0) return null;
-  const active = jobs.filter((j) => j.status === "queued" || j.status === "running").length;
-  const done = jobs.filter((j) => j.status === "done").length;
-  const failed = jobs.filter((j) => j.status === "error").length;
+  const { active, done, failed } = jobCounts(jobs);
   const label = active > 0 ? `${active} exporting` : failed > 0 ? `${failed} failed` : `${done} done`;
   return (
     <button
