@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { toClip } from "../src/lib/clips";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, defaultClip } from "../src/lib/types";
 
 const v = { duration: 100, width: 1920, height: 1080 };
 
@@ -92,4 +93,17 @@ test("clamps enums to defaults", () => {
 test("drops missing crop", () => {
   const c = toClip({ start: 1, end: 2, formats: ["gif"] }, v);
   expect(c.crop).toBeNull();
+});
+
+test("the default clip's values are all selectable in the panel", () => {
+  const d = defaultClip();
+  for (const f of d.formats) expect(FORMAT_OPTIONS).toContain(f);
+  expect(MP4_FPS_OPTIONS).toContain(d.fps);
+  expect(ANIM_FPS_OPTIONS).toContain(d.anim.fps);
+  expect(ANIM_MAX_MB_OPTIONS).toContain(d.anim.maxMB);
+  expect(ANIM_MAX_EDGE_OPTIONS).toContain(d.anim.maxEdge);
+});
+
+test("the sharable edges the panel offers are even", () => {
+  for (const edge of ANIM_MAX_EDGE_OPTIONS) expect(edge % 2).toBe(0);
 });

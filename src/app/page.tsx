@@ -13,6 +13,7 @@ import { useExportView } from "@/components/useExportView";
 import { VideoLoader } from "@/components/VideoLoader";
 import type { TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
+import { isActiveJob } from "@/lib/jobs";
 import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
 const freshDraft = (v: VideoInfo): ClipSpec => ({
@@ -24,6 +25,9 @@ export default function Page() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, ClipSpec[]>>({});
+  // The video whose project file has loaded; gates the clip list so a
+  // switch never shows the previous video's clips.
+  const [clipsLoadedFor, setClipsLoadedFor] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
@@ -39,12 +43,29 @@ export default function Page() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The active video's clips are loaded from disk (save guard).
   const clipsReady = useRef<string | null>(null);
+  // Clips waiting to reach disk. The debounced timer is cleared when the
+  // save effect re-runs (a video switch), so the payload lives here and
+  // gets flushed on switch and on unload instead of being dropped.
+  const pendingSave = useRef<{ id: string; body: string } | null>(null);
+  const flushPendingSave = () => {
+    const p = pendingSave.current;
+    if (!p) return;
+    pendingSave.current = null;
+    fetch(`/api/videos/${p.id}/clips`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: p.body,
+      keepalive: true,
+    }).catch(() => {});
+  };
 
   const active = videos.find((v) => v.id === activeId) ?? null;
-  const activeClips = active ? (clips[active.id] ?? []) : [];
+  // The list for the video whose project file has actually loaded: a
+  // switch shows empty until the fetch lands, never the old video's clips.
+  const activeClips = active && clipsLoadedFor === active.id ? clips[active.id] ?? [] : [];
   const selectedId = session.clipId;
   const hasRange = session.hasRange;
-  const activeJobs = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const activeJobs = jobs.filter(isActiveJob);
   // The export view: front-and-center modal while a batch runs,
   // minimizable to a corner pill (transition rules in lib/exportView.ts).
   const exportView = useExportView(activeJobs.length);
@@ -83,10 +104,9 @@ export default function Page() {
         if (!alive) return;
         setClips((all) => ({ ...all, [id]: j.clips ?? [] }));
         clipsReady.current = id;
+        setClipsLoadedFor(id);
       })
-      .catch(() => {
-        if (alive) clipsReady.current = id;
-      });
+      .catch(() => {});
     return () => {
       alive = false;
     };
@@ -94,16 +114,25 @@ export default function Page() {
 
   // Save the active video's clips, debounced after every change.
   useEffect(() => {
+    // A video switch clears the timer, so the pending payload would be
+    // dropped: when it belongs to the old video, send it now.
+    if (pendingSave.current && pendingSave.current.id !== activeId) flushPendingSave();
     if (!activeId || clipsReady.current !== activeId) return;
-    const h = setTimeout(() => {
-      fetch(`/api/videos/${activeId}/clips`, {
-        method: "PUT",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clips: clips[activeId] ?? [] }),
-      }).catch(() => {});
-    }, 500);
+    pendingSave.current = {
+      id: activeId,
+      body: JSON.stringify({ clips: clips[activeId] ?? [] }),
+    };
+    const h = setTimeout(flushPendingSave, 500);
     return () => clearTimeout(h);
   }, [clips, activeId]);
+
+  // A tab close takes the debounce timer with it, so flush what is still
+  // pending; keepalive lets the request outlive the document.
+  useEffect(() => {
+    const onLeave = () => flushPendingSave();
+    window.addEventListener("pagehide", onLeave);
+    return () => window.removeEventListener("pagehide", onLeave);
+  }, []);
 
   const selectVideo = (id: string, v?: VideoInfo) => {
     const video = v ?? videos.find((x) => x.id === id);
@@ -239,6 +268,9 @@ export default function Page() {
   // Leaving a clip preview: restore the previous position (if any),
   // deselect the clip, and clear its range back to free playback.
   const leavePreview = () => {
+    // Esc and Back are preview controls: with no clip under preview there
+    // is nothing to leave, and the draft's in/out must survive the keypress.
+    if (session.clipId === null) return;
     const v = videoRef.current;
     if (session.returnTo !== null && v) v.currentTime = session.returnTo;
     dispatch({ type: "leave-preview" });
@@ -338,9 +370,20 @@ export default function Page() {
       .then((r) => r.json())
       .then((j: Job[]) => {
         setJobs(j);
-        // Nothing left worth showing -> back to the editor.
-        if (!j.some((x) => x.status === "error")) exportView.dismiss();
+        // The clear deletes every settled job, so the refetch is the
+        // running set or nothing: the modal has nothing left to show.
+        exportView.dismiss();
       })
+      .catch(() => {});
+  };
+
+  const cancelOne = (id: string) => {
+    // Cancel the job server-side, then refresh so the row flips to the
+    // settled (error: "cancelled by user") state.
+    fetch(`/api/jobs/${id}`, { method: "DELETE" })
+      .then(() => fetch("/api/jobs"))
+      .then((r) => r.json())
+      .then((j: Job[]) => setJobs(j))
       .catch(() => {});
   };
 
@@ -392,6 +435,7 @@ export default function Page() {
               glow={session.step === "crop"}
             />
             <Timeline
+              key={active.id}
               duration={active.duration}
               time={time}
               inPoint={hasRange ? draft.start : null}
@@ -439,7 +483,7 @@ export default function Page() {
         </div>
       )}
       {exportView.view === "modal" && jobs.length > 0 ? (
-        <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} />
+        <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} onCancel={cancelOne} />
       ) : (
         <ExportPill jobs={jobs} onView={exportView.show} />
       )}

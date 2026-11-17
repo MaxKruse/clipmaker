@@ -130,6 +130,12 @@ export function CropOverlay({ frame, srcW, srcH, crop, aspect, onChange }: Props
     }
   };
 
+  // A lost pointer capture (cancelled touch) must not leave a stale drag
+  // live: the next hover would otherwise resize the crop.
+  const onCancel = () => {
+    drag.current = null;
+  };
+
   const cs = (v: number) => `${v * s}px`;
 
   return (
@@ -139,6 +145,8 @@ export function CropOverlay({ frame, srcW, srcH, crop, aspect, onChange }: Props
       onPointerDown={onDown}
       onPointerMove={onMove}
       onPointerUp={onUp}
+      onPointerCancel={onCancel}
+      onLostPointerCapture={onCancel}
     >
       {crop && (
         <div

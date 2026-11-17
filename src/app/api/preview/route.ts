@@ -15,11 +15,12 @@ export async function POST(req: NextRequest) {
     if (!v) return NextResponse.json({ error: "unknown video" }, { status: 404 });
     const time = Math.min(Math.max(0, Number(body.time) || 0), Math.max(0, v.duration - 0.05));
     const crop = body.crop ? normalizeCrop(v.width, v.height, body.crop) : null;
-    const out = path.join(TMP_DIR, `preview-${v.id}.jpg`);
+    const out = path.join(TMP_DIR, `preview-${v.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`); // unique per request
     fs.mkdirSync(TMP_DIR, { recursive: true });
     // Same floor-to-frame as the export so the preview shows the frame the cut will use.
     await run(findBin("ffmpeg"), buildPreviewArgs({ in: v.path, out, time: frameAt(time, v.fps), maxW: 480, crop }), 30_000);
     const buf = await fs.promises.readFile(out);
+    await fs.promises.unlink(out); // the response is built from the buffer
     return new Response(new Uint8Array(buf), {
       headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
     });

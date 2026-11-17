@@ -36,8 +36,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Raw upload: stream the body straight to disk (no multipart, no memory buffer).
-    const rawName = req.headers.get("x-filename") ?? "video.mp4";
-    const name = decodeURIComponent(rawName).replace(/[\\/:*?"<>|]/g, " ").trim() || "video.mp4";
+  const rawName = req.headers.get("x-filename") ?? "video.mp4";
+  let name: string;
+  try {
+    // A malformed percent-encoding must not take the whole upload down.
+    name = decodeURIComponent(rawName);
+  } catch {
+    name = rawName;
+  }
+  name = name.replace(/[\\/:*?"<>|]/g, " ").trim() || "video.mp4";
+  // Windows reserves these device names with or without an extension: a
+  // file named "nul.mp4" is uncreatable and undeletable.
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(name)) name = name.replace(/^[^.]*/, "_");
     const id = newId();
     const dir = path.join(UPLOADS_DIR, id);
     fs.mkdirSync(dir, { recursive: true });

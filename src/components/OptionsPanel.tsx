@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
-import type { ClipSpec, Format, VideoInfo } from "@/lib/types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
 import type { Aspect } from "./CropOverlay";
 
 function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) => void }) {
@@ -118,7 +118,7 @@ export function OptionsPanel({
 
       <Section title="Formats">
         <div className="flex flex-wrap items-center gap-2">
-          {(["mp4", "gif", "avif"] as Format[]).map((f) => (
+          {FORMAT_OPTIONS.map((f) => (
             <button
               key={f}
               className={pill(draft.formats.includes(f))}
@@ -147,9 +147,9 @@ export function OptionsPanel({
                 value={draft.fps}
                 onChange={(e) => onChange({ fps: Number(e.target.value) })}
               >
-                <option value={25}>25 fps</option>
-                <option value={30}>30 fps</option>
-                <option value={60}>60 fps</option>
+                {MP4_FPS_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f} fps</option>
+                ))}
               </select>
             </div>
             <label className="flex cursor-pointer items-end gap-2 pb-2 text-sm">
@@ -208,11 +208,9 @@ export function OptionsPanel({
                 value={draft.anim.fps}
                 onChange={(e) => onChange({ anim: { ...draft.anim, fps: Number(e.target.value) } })}
               >
-                <option value={15}>15 fps</option>
-                <option value={20}>20 fps</option>
-                <option value={25}>25 fps</option>
-                <option value={30}>30 fps</option>
-                <option value={60}>60 fps</option>
+                {ANIM_FPS_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f} fps</option>
+                ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -222,9 +220,9 @@ export function OptionsPanel({
                 value={draft.anim.maxMB}
                 onChange={(e) => onChange({ anim: { ...draft.anim, maxMB: Number(e.target.value) } })}
               >
-                <option value={10}>10 MB</option>
-                <option value={25}>25 MB</option>
-                <option value={48}>48 MB</option>
+                {ANIM_MAX_MB_OPTIONS.map((mb) => (
+                  <option key={mb} value={mb}>{mb} MB</option>
+                ))}
               </select>
             </div>
             <div className="flex flex-col gap-1.5">
@@ -234,12 +232,9 @@ export function OptionsPanel({
                 value={draft.anim.maxEdge}
                 onChange={(e) => onChange({ anim: { ...draft.anim, maxEdge: Number(e.target.value) } })}
               >
-                <option value={256}>256 px</option>
-                <option value={512}>512 px</option>
-                <option value={768}>768 px</option>
-                <option value={1024}>1024 px</option>
-                <option value={1280}>1280 px</option>
-                <option value={1440}>1440 px</option>
+                {ANIM_MAX_EDGE_OPTIONS.map((px) => (
+                  <option key={px} value={px}>{px} px</option>
+                ))}
               </select>
             </div>
           </div>

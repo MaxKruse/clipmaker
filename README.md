@@ -101,7 +101,10 @@ For a production build: `bun run build && bun run start` (same port).
    (8/12)`), and download links for every finished file. While it is
    working you can minimize it to a small pill in the bottom-right
    corner ("show" reopens it); when everything is done it stays open
-   with the outputs until you close it. Files are also written to
+   with the outputs until you close it. Any queued or running row has a
+   cancel button: it stops just that job (kills its ffmpeg process and
+   deletes its temp files) and marks it `cancelled by user`, leaving
+   the rest of the batch to finish. Files are also written to
    `out/<video-id>/` on disk, sharable copies in
    `out/<video-id>/sharable/`. In/out points keep their sub-second
    precision (shown to the millisecond in the clip list and timeline),

@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { humanSize } from "@/lib/human";
+import { isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
@@ -35,7 +36,8 @@ function StatusChip({ job }: { job: Job }) {
   );
 }
 
-function JobRow({ job }: { job: Job }) {
+function JobRow({ job, onCancel }: { job: Job; onCancel?: (id: string) => void }) {
+  const active = job.status === "queued" || job.status === "running";
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border bg-panel2 p-3">
       <div className="flex items-center gap-2">
@@ -46,6 +48,11 @@ function JobRow({ job }: { job: Job }) {
             {f.toUpperCase()}
           </span>
         ))}
+        {active && onCancel && (
+          <button className="btn btn-sm btn-danger" onClick={() => onCancel(job.id)}>
+            cancel
+          </button>
+        )}
         <StatusChip job={job} />
       </div>
       {job.status === "running" && (
@@ -70,10 +77,9 @@ function JobRow({ job }: { job: Job }) {
       {job.outputs.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {job.outputs.map((o) => {
-            const tier = o.tier ?? (o.name.includes("sharable") ? "sharable" : "full");
+            const tier = resolveTier(o);
             return (
-              <a key={o.name} className="btn btn-sm" href={`/api/jobs/${job.id}/file?k=${o.kind}`} download>
-                {tier === "sharable" && <span className="chip">sharable</span>}
+              <a key={o.name} className="btn btn-sm" href={`/api/jobs/${job.id}/file?k=${o.kind}&t=${tier}`} download>
                 <span className="font-mono">{o.name.split("/").pop()}</span>
                 <span className="text-muted">{humanSize(o.size)}</span>
               </a>
@@ -90,6 +96,8 @@ interface Props {
   /** Reads "close" when all settled, "minimize" while any job is moving. */
   onDismiss: () => void;
   onClear?: () => void;
+  /** Cancel a queued/running job by id (the cancel button in each row). */
+  onCancel?: (id: string) => void;
 }
 
 /**
@@ -97,7 +105,7 @@ interface Props {
  * running (spinner, per-clip progress bars, stage text, overall bar) and
  * stays open with the finished outputs until the user closes it.
  */
-export function ExportModal({ jobs, onDismiss, onClear }: Props) {
+export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
   // The modal is the topmost overlay: while it is mounted, Esc acts on
   // the modal, not on what is underneath (the clip preview's Esc).
   // Capture phase + stopPropagation keeps the key from reaching the
@@ -113,7 +121,7 @@ export function ExportModal({ jobs, onDismiss, onClear }: Props) {
   }, [onDismiss]);
 
   if (jobs.length === 0) return null;
-  const active = jobs.filter((j) => j.status === "queued" || j.status === "running");
+  const active = jobs.filter(isActiveJob);
   const done = jobs.filter((j) => j.status === "done");
   const failed = jobs.filter((j) => j.status === "error");
   const allSettled = active.length === 0;
@@ -168,7 +176,7 @@ export function ExportModal({ jobs, onDismiss, onClear }: Props) {
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
           {jobs.map((j) => (
-            <JobRow key={j.id} job={j} />
+            <JobRow key={j.id} job={j} onCancel={onCancel} />
           ))}
         </div>
 

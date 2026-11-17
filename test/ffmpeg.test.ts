@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import { once } from "../src/lib/ffmpeg";
 
-// `once` backs the encoder probes (nvenc, avif, mp4 encoder choice):
-// the probe runs exactly one time per process, and every caller -
-// including concurrent ones - shares the same result.
+// `once` backs the encoder probes (nvenc, avif, mp4 encoder choice): one
+// in-flight attempt shared by concurrent callers, retried after a failure.
 
 test("runs the probe exactly once and shares the result", async () => {
   let calls = 0;
@@ -18,13 +17,14 @@ test("runs the probe exactly once and shares the result", async () => {
   expect(calls).toBe(1);
 });
 
-test("shares the rejection so a failed probe is not retried", async () => {
+test("a failed probe is not cached: the next call retries", async () => {
   let calls = 0;
   const probe = once(async () => {
     calls++;
-    throw new Error("boom");
+    if (calls === 1) throw new Error("boom");
+    return 42;
   });
   await expect(probe()).rejects.toThrow("boom");
-  await expect(probe()).rejects.toThrow("boom");
-  expect(calls).toBe(1);
+  expect(await probe()).toBe(42);
+  expect(calls).toBe(2);
 });

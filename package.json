@@ -6,7 +6,8 @@
   "dev": "next dev -p 10100",
     "build": "next build",
   "start": "next start -p 10100",
-    "test": "bun test"
+    "test": "bun test",
+    "lint": "bunx tsc --noEmit"
   },
   "dependencies": {
     "next": "^15",

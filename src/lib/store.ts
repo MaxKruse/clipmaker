@@ -13,6 +13,13 @@ export const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 export const OUT_DIR = path.join(process.cwd(), "out");
 export const TMP_DIR = path.join(process.cwd(), ".tmp");
 
+/** Only a bare output name, or one under sharable/, may reach the out dir. */
+function safeOutputName(name: string): boolean {
+  if (!name || name.includes("..") || name.startsWith("/")) return false;
+  const parts = name.split("/");
+  return parts.length <= 2 && (parts.length === 1 || parts[0] === "sharable");
+}
+
 class Store {
   videos = new Map<string, VideoInfo>();
   jobs = new Map<string, Job>();
@@ -22,6 +29,23 @@ class Store {
     this.loadVideos();
     this.loadJobs();
     this.loadClips();
+    this.sweepTmp();
+  }
+
+  /**
+   * A restart kills every encode in flight, so nothing under .tmp belongs
+   * to a live job. Sweeping it stops orphaned temp files from piling up.
+   */
+  private sweepTmp() {
+    let names: string[];
+    try {
+      names = fs.readdirSync(TMP_DIR);
+    } catch {
+      return; // no temp dir yet
+    }
+    for (const name of names) {
+      fs.rmSync(path.join(TMP_DIR, name), { recursive: true, force: true });
+    }
   }
 
   private loadVideos() {
@@ -46,6 +70,10 @@ class Store {
     }
     for (const j of raw) {
       if (!j || !j.id) continue;
+      // A job whose video is gone has nothing to download, and an output
+      // name that escapes the out dir must never reach the download route.
+      if (!this.videos.has(j.videoId)) continue;
+      if (j.outputs?.some((o) => !safeOutputName(o.name))) continue;
       if (j.status === "running" || j.status === "queued") {
         j.status = "error";
         j.stage = null;

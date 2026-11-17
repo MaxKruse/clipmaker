@@ -158,6 +158,8 @@ export function Stage(props: StageProps) {
           if (scrubbing) seekAt(e.clientX);
         }}
         onPointerUp={() => setScrubbing(false)}
+        onPointerCancel={() => setScrubbing(false)}
+        onLostPointerCapture={() => setScrubbing(false)}
       >
         {inPoint != null && outPoint != null && outPoint > inPoint && (
           <div

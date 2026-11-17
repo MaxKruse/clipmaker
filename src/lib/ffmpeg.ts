@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import type { AvifEncoder } from "./args";
 
 // Fallback locations when the binary is not on PATH (this machine).
 const BIN_FALLBACKS: Record<string, string> = {
@@ -73,20 +74,55 @@ export function run(
   });
   return promise;
 }
+/** Thrown (and surfaced as the job error) when a user cancels a running job. */
+export class CancelledError extends Error {
+  constructor() {
+    super("cancelled by user");
+    this.name = "CancelledError";
+  }
+}
+
+/** A running ffmpeg command: await `promise`, or `kill()` to SIGKILL it. */
+export interface FfmpegHandle {
+  promise: Promise<void>;
+  /**
+   * SIGKILL the child (a no-op once it has exited). The promise stays
+   * pending until the child is reaped, then rejects with CancelledError.
+   */
+  kill: () => void;
+}
 /**
  * Run ffmpeg with `-progress pipe:1` and report 0..1 progress from out_time.
- * The args must already contain `-progress pipe:1`.
+ * The args must already contain `-progress pipe:1`. Returns a handle: await
+ * `promise` for the result, and `kill()` to cancel an in-flight encode.
+ * `timeoutMs` (default 0 = none) caps a hung encode so the pool can't stall.
  */
 export function runProgress(
   bin: string,
   args: string[],
   totalSec: number,
   onPct: (pct: number) => void,
-): Promise<void> {
+  timeoutMs = 0,
+): FfmpegHandle {
   const { promise, resolve, reject } = Promise.withResolvers<void>();
   const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
   let buf = "";
   let stderr = "";
+  let settled = false;
+  let killed = false;
+  let timer: NodeJS.Timeout | undefined;
+  const finish = (fn: () => void) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    fn();
+  };
+  if (timeoutMs > 0) {
+    timer = setTimeout(() => {
+      if (child.exitCode === null) child.kill("SIGKILL");
+      finish(() => reject(new Error(`timeout after ${timeoutMs}ms: ${bin}`)));
+    }, timeoutMs);
+  }
   const handleLine = (line: string) => {
     const eq = line.indexOf("=");
     if (eq < 0) return;
@@ -108,26 +144,36 @@ export function runProgress(
     }
   });
   child.stderr.on("data", (d: Buffer) => (stderr += d.toString()));
-  child.on("error", reject);
+  child.on("error", (e) => finish(() => reject(e)));
   child.on("close", (code) => {
-    if (code === 0) {
-      onPct(1);
-      resolve();
-    } else {
-      reject(new Error(`ffmpeg failed (${code}): ${tail(stderr)}`));
-    }
+    if (killed) finish(() => reject(new CancelledError()));
+    else if (code === 0) finish(() => { onPct(1); resolve(); });
+    else finish(() => reject(new Error(`ffmpeg failed (${code ?? "signal"}): ${tail(stderr)}`)));
   });
-  return promise;
+  return {
+    promise,
+    kill: () => {
+      killed = true;
+      if (child.exitCode === null) child.kill("SIGKILL");
+    },
+  };
 }
 
 /**
- * Memoize a one-shot async probe: `fn` runs exactly once per process
- * (concurrent callers share the in-flight promise) and its result -
- * including a rejection - is cached for the process lifetime.
+ * Memoize an async probe: concurrent callers share one in-flight attempt
+ * and its resolution; a rejection is not cached, so the next call retries.
  */
 export function once<T>(fn: () => Promise<T>): () => Promise<T> {
   let p: Promise<T> | null = null;
-  return () => (p ??= fn());
+  return () => {
+    if (p) return p;
+    const next = fn().catch((e) => {
+      if (p === next) p = null; // a failed probe is not cached
+      throw e;
+    });
+    p = next;
+    return next;
+  };
 }
 
 /** Parse a rational fps string like "30000/1001" -> 29.97. */
@@ -231,8 +277,6 @@ export const nvencAvailable = once(async (): Promise<boolean> => {
     return false;
   }
 });
-
-export type AvifEncoder = "libsvtav1" | "libaom-av1";
 
 /**
  * Probe-encode 0.5s of testsrc into a real .avif, preferring libsvtav1

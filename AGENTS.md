@@ -40,9 +40,12 @@ src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
 src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
-                    encoder probes (nvenc, avif; one-shot via once())
+                    encoder probes (nvenc, avif; one-shot via once()), and
+                    the cancel registry (runTracked tracks each running
+                    child, killProcessTree kills it) that lets the runner
+                    interrupt a job mid-encode
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
-src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller)
+src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job)
 src/app/api/**      thin route handlers over store/runner
 src/components/**   UI, all "use client"; useExportView.ts is the thin hook
                     around the exportView reducer
@@ -171,6 +174,11 @@ Key invariants:
   clip (`clipNo` = 1-based index).
 - `GET /api/jobs` (newest batch first, clip order within a batch),
   `DELETE /api/jobs` (clear finished),
+  `DELETE /api/jobs/[id]` - cancel one queued/running job: sets the
+  cancel flag, kills the job's ffmpeg process tree, settles the job as
+  `error: "cancelled by user"` and removes its `.tmp/<id>/` (returns
+  `{cancelled: false}` when the job is already settled); 404 for an
+  unknown id.
   `GET /api/jobs/[id]/file?k=mp4|gif|avif` (attachment download;
   content-type per extension - `video/mp4`, `image/gif`, `image/avif`;
   the filename header is the basename, so sharable outputs with a
@@ -280,7 +288,9 @@ Key invariants:
   while the modal is open, Esc does not leave the preview. Header
   shows the overall percentage (mean over jobs); each row shows a
   status chip, the stage text, a per-job bar, and the finished outputs
-  with a `sharable` chip. Footer: `clear finished` (shown only when
+  with a `sharable` chip; a `cancel` button (queued/running rows only)
+  calls `DELETE /api/jobs/[id]` and the row then settles as
+  `error: "cancelled by user"`. Footer: `clear finished` (shown only when
   settled with at least one done; clears done/error jobs and dismisses
   the view when nothing but success remains).
 - **OptionsPanel sections**: clip options are grouped into titled
@@ -301,6 +311,12 @@ Key invariants:
   restarted before the job finished") - temp files in `.tmp/` of a dead
   job are orphaned and can be removed. On the same load, legacy
   jobs.json rows with a string `stage` migrate to null.
+- The MP4 stage encodes directly into `out/<videoId>/` (not a temp
+  file), so a job that is cancelled or errors mid-MP4-encode leaves a
+  partial `.mp4` behind in `out/` (it is not in the job's `outputs`).
+  GIF/AVIF stages only write to `out/` after the whole tier succeeds,
+  so they are clean. Cancelling mid-GIF/AVIF never leaves partial
+  sharable files.
 - Uploads stream straight from `req.body` (Web stream reader) into the
   destination file with `once(ws, "drain")` backpressure - do not buffer
   the body in memory.

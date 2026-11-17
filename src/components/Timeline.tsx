@@ -52,10 +52,6 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
   const viewRef = useRef(view);
   viewRef.current = view;
 
-  // Reset the view when switching videos.
-  useEffect(() => {
-    setView({ start: 0, end: duration });
-  }, [duration]);
 
   // Frame a selected clip: the view zooms to it with FOCUS_PAD of
   // margin on each side so its in/out points can be fine-tuned.
@@ -151,6 +147,13 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
 
   useEffect(() => stopAutoPan, []);
 
+  // A lost pointer capture (cancelled touch, hidden tab) would leave the
+  // drag live and the auto-pan loop running: release everything.
+  const onCancel = () => {
+    stopAutoPan();
+    drag.current = null;
+  };
+
   const onDown = (e: React.PointerEvent) => {
     const el = e.target as HTMLElement;
     if (el.closest("button")) return;
@@ -221,6 +224,8 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
       onPointerDown={onDown}
       onPointerMove={onPointerMove}
       onPointerUp={onUp}
+      onPointerCancel={onCancel}
+      onLostPointerCapture={onCancel}
     >
       {glow && (
         <span className="chip pointer-events-none absolute left-1 top-1 z-10">drag to set the times</span>

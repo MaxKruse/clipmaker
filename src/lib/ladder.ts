@@ -36,11 +36,11 @@ export function emergencyRung(maxEdge: number, fps: number): Rung {
   return { edge: evenFloor(maxEdge * EMERGENCY_RATIO), fps: Math.max(1, Math.round(fps * FPS_STEP)) };
 }
 
-// AVIF sharable ladder: the three quality axes, in order - fps (anim ->
-// 5/6 x anim), edge (the GIF ping-pong grid), then CRF (25 -> 36, the
-// recipe's step of 4, clamped at 36). The whole fps/edge grid is tried
-// at each CRF, top CRF first (AV1 spends its bits on detail, so a higher
-// CRF at full resolution usually beats a lower CRF at a smaller frame).
+// AVIF sharable ladder: the three quality axes, in order - CRF (25 -> 36,
+// the recipe's step of 4), then the GIF ping-pong grid (fps: anim -> 5/6 x
+// anim, edge: 1.0 -> 0.25). A CRF step is only degraded after the whole
+// fps/edge grid misses the cap, so crf 25 (the best quality) is tried at
+// every grid shape before the quality drops.
 const AVIF_CRF_STEPS = [25, 29, 33, 36];
 const AVIF_EMERGENCY_CRF = 40;
 
@@ -51,8 +51,9 @@ export interface AvifRung {
 }
 
 /**
- * AVIF sharable ladder, highest quality first: the fps/edge ping-pong
- * grid (same as GIF) at each CRF step, top CRF first. Edges stay even;
+ * AVIF sharable ladder, highest quality first: sweeps the fps/edge
+ * ping-pong grid (same as GIF) at the current CRF, degrades the CRF only
+ * after the whole grid misses the cap, and sweeps again. Edges stay even;
  * maxEdge must already be capped by the crop/source width (no upscale).
  */
 export function buildAvifLadder(maxEdge: number, fps: number): AvifRung[] {
