@@ -40,6 +40,8 @@ export default function Page() {
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // What the page-load ingest sweep did (null when it found nothing).
+  const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // The active video's clips are loaded from disk (save guard).
   const clipsReady = useRef<string | null>(null);
@@ -70,16 +72,29 @@ export default function Page() {
   // minimizable to a corner pill (transition rules in lib/exportView.ts).
   const exportView = useExportView(activeJobs.length);
 
-  // Load sessions once; poll jobs every second (cheap on localhost).
+  // Load sessions once; poll jobs every second (cheap on localhost). The
+  // videos endpoint also runs the ingest-folder sweep, so a drop into
+  // ingest/ lands here on the next navigation/refresh.
   useEffect(() => {
     fetch("/api/videos")
       .then((r) => r.json())
-      .then((vs: VideoInfo[]) => {
-        setVideos(vs);
-        if (vs[0]) {
-          setActiveId(vs[0].id);
-          setDraft(freshDraft(vs[0]));
+      .then((j: {
+        videos: VideoInfo[];
+        ingested: { name: string; id: string }[];
+        rejected: { name: string; reason: string }[];
+        pending: string[];
+        notice: string | null;
+      }) => {
+        setVideos(j.videos);
+        // A freshly ingested video is what the user just dropped: make it
+        // active (the last one when several arrived), else the first video.
+        const last = j.ingested.length ? j.ingested[j.ingested.length - 1] : null;
+        const first = last ? j.videos.find((v) => v.id === last.id) : j.videos[0];
+        if (first) {
+          setActiveId(first.id);
+          setDraft(freshDraft(first));
         }
+        if (j.notice) setIngestMsg({ text: j.notice, ok: j.rejected.length === 0 });
       })
       .catch(() => {});
     const poll = setInterval(async () => {
@@ -406,6 +421,11 @@ export default function Page() {
         onAdded={onAdded}
         onLoadClips={importClips}
       />
+      {ingestMsg && (
+        <span className={`-mt-1 px-1 text-xs break-words ${ingestMsg.ok ? "text-ok" : "text-danger"}`}>
+          {ingestMsg.text}
+        </span>
+      )}
 
       {active ? (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">

@@ -13,6 +13,15 @@ export const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 export const OUT_DIR = path.join(process.cwd(), "out");
 export const TMP_DIR = path.join(process.cwd(), ".tmp");
 
+/**
+ * Drop folder for huge files: the next page load probes and moves whatever
+ * is in here (lib/ingest.ts). Point CLIPMAKER_INGEST_DIR elsewhere (e.g. a
+ * mount) to change the location.
+ */
+export const INGEST_DIR = process.env.CLIPMAKER_INGEST_DIR
+  ? path.resolve(process.env.CLIPMAKER_INGEST_DIR)
+  : path.join(process.cwd(), "ingest");
+
 /** Only a bare output name, or one under sharable/, may reach the out dir. */
 function safeOutputName(name: string): boolean {
   if (!name || name.includes("..") || name.startsWith("/")) return false;

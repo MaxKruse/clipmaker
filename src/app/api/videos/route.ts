@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { probeVideo } from "@/lib/ffmpeg";
+import { ingestNotice, sweepIngest } from "@/lib/ingest";
 import { UPLOADS_DIR, store } from "@/lib/store";
 import { newId, type VideoInfo } from "@/lib/types";
 
@@ -89,6 +90,16 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/**
+ * Page load = ingest trigger: sweep the drop folder before answering, so a
+ * file placed in ingest/ shows up (and is auto-selected) on the next
+ * navigation/refresh.
+ */
 export async function GET() {
-  return NextResponse.json([...store.videos.values()]);
+  const report = await sweepIngest();
+  return NextResponse.json({
+    videos: [...store.videos.values()],
+    ...report,
+    notice: ingestNotice(report),
+  });
 }

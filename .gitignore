@@ -2,6 +2,7 @@ node_modules/
 .next/
 out/
 uploads/
+ingest/
 .tmp/
 *.log
 next-env.d.ts

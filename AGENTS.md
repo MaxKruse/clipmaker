@@ -44,6 +44,10 @@ src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
                     the cancel registry (runTracked tracks each running
                     child, killProcessTree kills it) that lets the runner
                     interrupt a job mid-encode
+src/lib/ingest.ts   ingest-folder sweep: pure helpers (shouldIngest,
+                    quarantineName, classifyMoveFailure, ingestNotice) plus
+                    the single-flight sweepIngest (server-only - the page
+                    must never import it, only the videos route may)
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
 src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job)
 src/app/api/**      thin route handlers over store/runner
@@ -104,6 +108,13 @@ Key invariants:
 
 - `.data/videos.json`, `.data/jobs.json` - persisted session state.
 - `uploads/<videoId>/<name>` - uploaded files.
+- `ingest/` - drop folder for huge files. Not created by the app (the
+  user creates it, optionally at another location via
+  `CLIPMAKER_INGEST_DIR`). The next page load moves proberable files
+  into `uploads/<videoId>/` and registers them; unproberable files are
+  quarantined into `ingest/failed/` with a `.err` sidecar; files still
+  being written (size change during the probe, or the writer still
+  locking them) are left in place and retried on the next page load.
 - `out/<videoId>/clipN[-note].mp4|gif|avif` - finished exports (full
   tier); sharable GIF/AVIF copies in `out/<videoId>/sharable/`.
 - `.tmp/<jobId>/` - per-job temp files, deleted in a `finally`.
@@ -157,8 +168,12 @@ Key invariants:
 - `POST /api/videos` - JSON `{path}` registers a local file (probed,
   referenced in place); a raw body (no multipart) with an `x-filename`
   header uploads it into `uploads/`. 64GB cap, backpressure handled.
-- `GET /api/videos`, `DELETE /api/videos/[id]` - list / remove (deletes
-  the upload dir only when `uploaded`).
+- `GET /api/videos` - runs the ingest-folder sweep (`sweepIngest`,
+  single-flight) and then returns
+  `{ videos, ingested, rejected, pending, notice }`; `notice` is the
+  one-line banner text (contract pinned by `test/ingest.test.ts`), null
+  when the sweep found nothing. `DELETE /api/videos/[id]` - remove
+  (deletes the upload dir only when `uploaded`).
 - `GET /api/videos/[id]/file` - byte-range streaming (206); the `<video>`
   element needs this for seeking.
 - `GET/PUT /api/videos/[id]/clips` - the video's project file: fetch
@@ -218,6 +233,11 @@ Key invariants:
   the video crops (click = plant, drag = draw, move, 8 resize handles);
   clicking the video never toggles playback. Letterbox clicks clamp to
   the frame in `normalizeCrop`.
+- **Ingest banner**: the page's mount fetch of `/api/videos` carries the
+  sweep's `notice` (one line, built by `ingestNotice` in lib/ingest.ts).
+  The page shows it under the video loader - `text-ok` when nothing
+  failed, `text-danger` when any file was rejected - and makes a freshly
+  ingested video the active one (the last one when several arrived).
 - The Stage has a secondary scrub bar under the video (above the
   transport row): click/drag seeks across the full duration and shows
   the live in/out band. Stage's `inPoint`/`outPoint` props are
@@ -303,6 +323,17 @@ Key invariants:
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
   transpile. Do not bump it.
+- **Ingest "still writing" has two triggers**: a size change during the
+  probe, or the rename failing with EBUSY/EPERM/EACCES (`classifyMoveFailure`)
+  because the writer still owns the file. The size check alone misses
+  write stalls (e.g. between the writer's flushes), so the errno class is
+  the backstop - both report the file as pending, not rejected.
+- **`CLIPMAKER_INGEST_DIR` may point at another volume** (a mount): the
+  sweep falls back to copy+unlink when rename hits EXDEV.
+- **The ingest sweep runs inside `GET /api/videos`** - a page load is the
+  ingest trigger by contract. Drops after a load wait for the next
+  navigation/refresh; the sweep is single-flight, so concurrent loads
+  share one run.
 - ffmpeg/ffprobe discovery order: `CLIPMAKER_FFMPEG`/`CLIPMAKER_FFPROBE`
   env vars > PATH > `C:\ProgramData\chocolatey\bin`. The probe is
   spawnSync `-version`, cached in-process; `findBin` must keep working
@@ -328,9 +359,9 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 121 unit tests over the pure libs (times, bitrate,
+- `bun test` - 143 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips, jobs, stages, exportView,
-  clipSession, ffmpeg's once).
+  clipSession, ingest, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
@@ -338,3 +369,7 @@ Key invariants:
   gif/avif at source resolution uncapped, sharable tier at maxEdge
   within the size cap, avif codec `av1`) and confirm
   `GET /api/videos/<id>/file` answers 206 for a Range request.
+- Ingest: drop a file into `ingest/` and refresh - it is moved into
+  `uploads/<videoId>/`, registered (banner + auto-selected); a file
+  still being written reports pending and ingests on the next refresh;
+  an unproberable file lands in `ingest/failed/` with a `.err` sidecar.

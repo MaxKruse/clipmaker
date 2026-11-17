@@ -151,6 +151,30 @@ Imported clips get the default settings (MP4 + GIF, audio on, MP4 at
 60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
 queue before export.
 
+## Ingest folder for huge files
+
+Browser uploads of very large files are slow. The third way to load a
+video: drop a file into an ingest folder and refresh the page.
+
+1. Create an `ingest/` folder in the project root (or point
+   `CLIPMAKER_INGEST_DIR` at any folder you like, e.g. a mount).
+2. Copy a video into it - even while it is still copying.
+3. Navigate to the page (or refresh it).
+
+On every page load, clipmaker probes each file in the folder and moves
+the good ones into `uploads/`, loading them as videos. A freshly
+ingested video becomes the active one, and a one-line report under the
+video loader says what happened:
+
+- **still writing** - the file is still being written (or still locked
+  by the copy in progress); it is picked up on the next refresh.
+- **ingest failed** - the file could not be probed. It is moved to
+  `ingest/failed/` with a `.err` file next to it that explains why.
+
+Note: ingested files are *moved*, not copied, and are treated like
+uploads - removing the video from the app deletes the file from disk.
+If the original must stay in place, use "Add by path" instead.
+
 ## Limitations
 
 - Exports run a few at a time (two in parallel by default); the rest
@@ -158,7 +182,8 @@ queue before export.
 - Exports are always re-encoded (no stream-copy), so even "source"
   quality takes a moment; NVENC makes this fast on supported GPUs.
 - Uploaded files are copied into `uploads/`; for very large files prefer
-  the local-path option.
+  the local-path option (references the file in place) or the ingest
+  folder (moves the file into `uploads/`).
 - The app assumes it runs on the same machine as the videos (it cannot
   reach paths on other hosts).
 - GIFs are built in three stages (cut, palette, encode); the sharable
