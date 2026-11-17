@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { focusWindow, formatShort, formatTime, frameAt, parseTime } from "../src/lib/times";
+import { focusWindow, formatClipTime, formatShort, formatTime, frameAt, parseTime } from "../src/lib/times";
 
 describe("parseTime", () => {
   test("parses plain seconds", () => {
@@ -104,5 +104,33 @@ describe("focusWindow", () => {
 
   test("shrinks to the video when the padded window exceeds it", () => {
     expect(focusWindow(1, 2, 6, 5)).toEqual({ start: 0, end: 6 });
+  });
+});
+
+describe("formatClipTime", () => {
+  test("omits the fraction when whole seconds", () => {
+    expect(formatClipTime(0)).toBe("0:00");
+    expect(formatClipTime(887)).toBe("14:47");
+    expect(formatClipTime(3701)).toBe("1:01:41");
+  });
+
+  test("keeps the fraction, trailing zeros trimmed", () => {
+    expect(formatClipTime(887.5)).toBe("14:47.5");
+    expect(formatClipTime(125.25)).toBe("2:05.25");
+    expect(formatClipTime(3701.25)).toBe("1:01:41.25");
+    expect(formatClipTime(887.05)).toBe("14:47.05");
+    expect(formatClipTime(887.005)).toBe("14:47.005");
+  });
+
+  test("rounds to the millisecond grid", () => {
+    expect(formatClipTime(0.0004)).toBe("0:00");
+    expect(formatClipTime(0.0005)).toBe("0:00.001");
+    expect(formatClipTime(0.4996)).toBe("0:00.5");
+  });
+
+  test("round-trips through parseTime", () => {
+    for (const t of [0, 14.5, 887.123, 3701.999, 7199.5]) {
+      expect(parseTime(formatClipTime(t))).toBeCloseTo(t, 3);
+    }
   });
 });

@@ -11,7 +11,7 @@ import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
 import { useExportView } from "@/components/useExportView";
 import { VideoLoader } from "@/components/VideoLoader";
-import type { TxtClip } from "@/lib/clipsTxt";
+import { clipsTxtForVideo, type TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
 import { isActiveJob } from "@/lib/jobs";
 import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
@@ -379,6 +379,24 @@ export default function Page() {
     }
   };
 
+  // Download the active video's clips as a clips.txt file (client-side,
+  // no server round trip): the # header keeps the file round-tripping
+  // through the import on the other side.
+  const exportClipsTxt = () => {
+    if (!active || activeClips.length === 0) return;
+    const text = clipsTxtForVideo(active.name, activeClips);
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const base = active.name.replace(/\.[a-z0-9]+$/i, "") || active.name;
+    a.href = url;
+    a.download = `${base}.clips.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const clearFinished = () => {
     fetch("/api/jobs", { method: "DELETE" })
       .then(() => fetch("/api/jobs"))
@@ -494,6 +512,7 @@ export default function Page() {
               onSelect={selectClip}
               onDelete={deleteClip}
               onExport={exportAll}
+              onExportTxt={exportClipsTxt}
             />
           </div>
         </div>

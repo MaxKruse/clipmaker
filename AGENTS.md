@@ -25,12 +25,14 @@ frames, and download links.
 The code is layered so that everything testable is pure:
 
 ```
-src/lib/times.ts    time parsing/formatting + frameAt + clip focus window
+src/lib/times.ts    time parsing/formatting + frameAt + formatClipTime + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
 src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
-src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections)
+src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
+                    inverse clipsTxtForVideo serializer (round trip pinned
+                    by test/clipsTxt.test.ts)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
@@ -261,6 +263,13 @@ Key invariants:
   name is imported (`sectionForVideo`), otherwise the UI errors instead
   of importing the wrong VOD's clips. Imported clips are clamped to the
   video duration in `page.tsx:importClips`.
+- **clips.txt export**: the ClipQueue footer button (next to Export)
+  downloads the active video's clips as `<video basename>.clips.txt`
+  (client-side Blob, no server round trip). The text is built by
+  `clipsTxtForVideo` (clipsTxt.ts): a `# <video name>` header plus one
+  `<start> - <end> <note?>` line per clip, times via `formatClipTime`
+  (sub-second precision, trailing zeros trimmed, parseTime-compatible),
+  notes flattened to one line. Disabled while the queue is empty.
 - **Clip preview jump**: clicking a clip in the queue seeks the player to
   the clip's start and stores the pre-jump position (`session.returnTo`
   in the clip session, kept across consecutive clip clicks). The timeline also
@@ -359,7 +368,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 143 unit tests over the pure libs (times, bitrate,
+- `bun test` - 152 unit tests over the pure libs (times, bitrate,
   ladder, names, crop, args, clipsTxt, clips, jobs, stages, exportView,
   clipSession, ingest, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.

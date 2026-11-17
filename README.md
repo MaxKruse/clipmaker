@@ -151,6 +151,13 @@ Imported clips get the default settings (MP4 + GIF, audio on, MP4 at
 60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
 queue before export.
 
+The other direction works too: the **"clips.txt"** button next to the
+Export button in the clip queue downloads your current clip list as a
+notes file in exactly this format - a `# header` with the video's file
+name, then one `<start> - <end> <note>` line per clip, sub-second
+timestamps included. Save it to your notes file (or merge it into a
+multi-video one) and it imports cleanly again.
+
 ## Ingest folder for huge files
 
 Browser uploads of very large files are slow. The third way to load a

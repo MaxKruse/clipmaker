@@ -35,6 +35,25 @@ export function formatShort(sec: number): string {
 }
 
 /**
+ * Compact, exact display for clip files: "m:ss" / "h:mm:ss" with a
+ * millisecond fraction only when it is non-zero, trailing zeros trimmed
+ * ("14:47.5", "14:47.05"). parseTime accepts every output.
+ */
+export function formatClipTime(sec: number): string {
+  const ms = Math.round(Math.max(0, sec) * 1000);
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  const s = Math.floor((ms % 60_000) / 1000);
+  const r = ms % 1000;
+  let base = h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
+  if (r > 0) {
+    const frac = String(r).padStart(3, "0").replace(/0+$/, "");
+    base += `.${frac}`;
+  }
+  return base;
+}
+
+/**
  * The pts of the frame a player shows at time `t` on a source at `fps`:
  * floor to the frame grid, so a cut at `t` starts on the exact frame
  * displayed at `t` (not the next one). The epsilon absorbs float drift

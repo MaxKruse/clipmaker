@@ -1,4 +1,4 @@
-import { parseTime } from "./times";
+import { formatClipTime, parseTime } from "./times";
 
 /** One parsed clip line: a time range plus the note text that follows it. */
 export interface TxtClip {
@@ -59,6 +59,26 @@ export function parseClipsTxt(
     });
   }
   return { sections, skipped };
+}
+
+/**
+ * Serialize clips for a video back into clips.txt format: a
+ * `# <video name>` header (the sectionForVideo contract on re-import)
+ * plus one `<start> - <end> <note?>` line per clip, sub-second
+ * precision kept. Notes are flattened to one line so a stored note can
+ * never break the line grammar. The round trip
+ * parseClipsTxt(clipsTxtForVideo(...)) is pinned by the tests.
+ */
+export function clipsTxtForVideo(
+  videoName: string,
+  clips: { start: number; end: number; note: string }[],
+): string {
+  const lines = [`# ${videoName}`];
+  for (const c of clips) {
+    const note = c.note.replace(/[\r\n]+/g, " ").trim();
+    lines.push(note ? `${formatClipTime(c.start)} - ${formatClipTime(c.end)} ${note}` : `${formatClipTime(c.start)} - ${formatClipTime(c.end)}`);
+  }
+  return lines.join("\n") + "\n";
 }
 
 /**

@@ -14,10 +14,11 @@ interface Props {
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
   onExport: () => void;
+  onExportTxt: () => void;
 }
 
 export function ClipQueue({
-  clips, selectedId, exporting, exportError, attnAdd, onAdd, onSelect, onDelete, onExport,
+  clips, selectedId, exporting, exportError, attnAdd, onAdd, onSelect, onDelete, onExport, onExportTxt,
 }: Props) {
   return (
     <div data-clips-panel className="panel flex flex-col p-3 xl:min-h-0 xl:flex-1">
@@ -67,17 +68,27 @@ export function ClipQueue({
         ))}
       </div>
       {exportError && <span className="mt-2 block shrink-0 text-xs break-words text-danger">{exportError}</span>}
-      <button
-        className="btn btn-primary mt-3 w-full shrink-0"
-        disabled={clips.length === 0 || exporting}
-        onClick={onExport}
-      >
-        {exporting
-          ? "Queuing..."
-          : clips.length === 0
-            ? "Export"
-            : `Export ${clips.length} clip${clips.length === 1 ? "" : "s"}`}
-      </button>
+      <div className="mt-3 flex shrink-0 gap-2">
+        <button
+          className="btn btn-primary min-w-0 flex-1"
+          disabled={clips.length === 0 || exporting}
+          onClick={onExport}
+        >
+          {exporting
+            ? "Queuing..."
+            : clips.length === 0
+              ? "Export"
+              : `Export ${clips.length} clip${clips.length === 1 ? "" : "s"}`}
+        </button>
+        <button
+          className="btn btn-sm shrink-0 self-center"
+          disabled={clips.length === 0}
+          onClick={onExportTxt}
+          title="Download a clips.txt with the current timestamps and notes"
+        >
+          clips.txt
+        </button>
+      </div>
     </div>
   );
 }
