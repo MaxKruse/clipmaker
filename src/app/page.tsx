@@ -14,10 +14,10 @@ import { VideoLoader } from "@/components/VideoLoader";
 import { clipsTxtForVideo, type TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
 import { isActiveJob } from "@/lib/jobs";
-import { defaultClip, newId, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
+import { defaultClip, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
-const freshDraft = (v: VideoInfo): ClipSpec => ({
-  ...defaultClip(),
+const freshDraft = (v: VideoInfo, d: ClipDefaults): ClipSpec => ({
+  ...defaultClip("", d),
   end: Math.max(0.5, Math.min(5, v.duration)),
 });
 
@@ -29,6 +29,10 @@ export default function Page() {
   // switch never shows the previous video's clips.
   const [clipsLoadedFor, setClipsLoadedFor] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
+  // Export options for NEW and imported clips (persisted in .data/defaults.json).
+  const [defaults, setDefaults] = useState<ClipDefaults>(defaultClipDefaults);
+  const defaultsRef = useRef(defaults);
+  defaultsRef.current = defaults;
   const [jobs, setJobs] = useState<Job[]>([]);
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(false);
@@ -76,6 +80,10 @@ export default function Page() {
   // videos endpoint also runs the ingest-folder sweep, so a drop into
   // ingest/ lands here on the next navigation/refresh.
   useEffect(() => {
+    fetch("/api/defaults")
+      .then((r) => r.json())
+      .then((d: ClipDefaults) => setDefaults(d))
+      .catch(() => {});
     fetch("/api/videos")
       .then((r) => r.json())
       .then((j: {
@@ -92,7 +100,9 @@ export default function Page() {
         const first = last ? j.videos.find((v) => v.id === last.id) : j.videos[0];
         if (first) {
           setActiveId(first.id);
-          setDraft(freshDraft(first));
+          // defaultsRef: the mount effect's closure captures the initial
+          // render; the persisted defaults may have landed in the meantime.
+          setDraft(freshDraft(first, defaultsRef.current));
         }
         if (j.notice) setIngestMsg({ text: j.notice, ok: j.rejected.length === 0 });
       })
@@ -157,7 +167,7 @@ export default function Page() {
     setPlaying(false);
     setTime(0);
     setExportError(null);
-    setDraft(freshDraft(video));
+    setDraft(freshDraft(video, defaults));
   };
 
   const onAdded = (v: VideoInfo) => {
@@ -192,6 +202,16 @@ export default function Page() {
     if (!v || !active) return;
     v.currentTime = Math.max(0, Math.min(t, active.duration));
     setTime(v.currentTime);
+  };
+
+  // Persist the new-clip defaults (small file, fire and forget).
+  const saveDefaults = (d: ClipDefaults) => {
+    setDefaults(d);
+    fetch("/api/defaults", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(d),
+    }).catch(() => {});
   };
 
   const togglePlay = (p: boolean) => {
@@ -307,7 +327,7 @@ export default function Page() {
     const v = videoRef.current;
     if (session.returnTo !== null && v) v.currentTime = session.returnTo;
     dispatch({ type: "leave-preview" });
-    if (active) setDraft(freshDraft(active));
+    if (active) setDraft(freshDraft(active, defaults));
   };
 
   // A click on inert background leaves the preview the same way as
@@ -357,7 +377,7 @@ export default function Page() {
     if (!activeId || !active) return;
     const list = raw
       .map((r) => ({
-        ...defaultClip(r.note),
+        ...defaultClip(r.note, defaults),
         start: r.start,
         end: Math.min(r.end, active.duration),
       }))
@@ -517,7 +537,9 @@ export default function Page() {
               draft={draft}
               inOut={hasRange ? { start: draft.start, end: draft.end } : null}
               aspect={aspect}
+              defaults={defaults}
               onChange={updateDraft}
+              onDefaultsChange={saveDefaults}
               onAspect={setAspect}
               onClearCrop={() => updateDraft({ crop: null })}
             />

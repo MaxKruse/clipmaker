@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
+import { toDefaults } from "./clips";
 import { sortJobs } from "./jobs";
-import type { ClipSpec, Job, VideoInfo } from "./types";
+import { defaultClipDefaults, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
 const DATA_DIR = path.join(process.cwd(), ".data");
 const VIDEOS_FILE = path.join(DATA_DIR, "videos.json");
 const JOBS_FILE = path.join(DATA_DIR, "jobs.json");
 const CLIPS_FILE = path.join(DATA_DIR, "clips.json");
+const DEFAULTS_FILE = path.join(DATA_DIR, "defaults.json");
 
 export const UPLOADS_DIR = path.join(process.cwd(), "uploads");
 export const OUT_DIR = path.join(process.cwd(), "out");
@@ -34,10 +36,13 @@ class Store {
   jobs = new Map<string, Job>();
   clips = new Map<string, ClipSpec[]>();
 
+  defaults: ClipDefaults = defaultClipDefaults();
+
   constructor() {
     this.loadVideos();
     this.loadJobs();
     this.loadClips();
+    this.loadDefaults();
     this.sweepTmp();
   }
 
@@ -166,6 +171,24 @@ class Store {
   setClips(videoId: string, list: ClipSpec[]) {
     this.clips.set(videoId, list);
     this.saveClips();
+  }
+
+  /** New-clip defaults: a missing or corrupt file self-heals to the
+   * shipped defaults (toDefaults falls back field by field). */
+  private loadDefaults() {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(fs.readFileSync(DEFAULTS_FILE, "utf8"));
+    } catch {
+      return;
+    }
+    this.defaults = toDefaults(raw);
+  }
+
+  setDefaults(d: ClipDefaults) {
+    this.defaults = d;
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(DEFAULTS_FILE, JSON.stringify(d, null, 2));
   }
 }
 

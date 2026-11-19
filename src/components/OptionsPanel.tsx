@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { avifDurationLevel } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
-import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
 import type { Aspect } from "./CropOverlay";
 
 function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) => void }) {
@@ -62,18 +62,27 @@ interface Props {
   inOut: { start: number; end: number } | null;
   draft: ClipSpec;
   aspect: Aspect;
+  /** Export options for new and imported clips (persisted). */
+  defaults: ClipDefaults;
   onChange: (patch: Partial<ClipSpec>) => void;
+  onDefaultsChange: (d: ClipDefaults) => void;
   onAspect: (a: Aspect) => void;
   onClearCrop: () => void;
 }
 
 export function OptionsPanel({
-  video, draft, inOut, aspect, onChange, onAspect, onClearCrop,
+  video, draft, inOut, aspect, defaults, onChange, onDefaultsChange, onAspect, onClearCrop,
 }: Props) {
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
   const toggleFormat = (f: Format) => {
     const has = draft.formats.includes(f);
     if (has && draft.formats.length === 1) return; // at least one format
     onChange({ formats: has ? draft.formats.filter((x) => x !== f) : [...draft.formats, f] });
+  };
+  const toggleDefaultsFormat = (f: Format) => {
+    const has = defaults.formats.includes(f);
+    if (has && defaults.formats.length === 1) return; // at least one format
+    onDefaultsChange({ ...defaults, formats: has ? defaults.formats.filter((x) => x !== f) : [...defaults.formats, f] });
   };
 
   const srcKbit = resolveSourceKbit(video);
@@ -88,7 +97,121 @@ export function OptionsPanel({
 
   return (
     <div data-clip-options className="panel flex shrink-0 flex-col gap-3 p-3">
-      <span className="label">Clip options</span>
+      <div className="flex items-center justify-between">
+        <span className="label">Clip options</span>
+        <button
+          className={`btn btn-sm ${defaultsOpen ? "border-accent/60 text-accent" : ""}`}
+          onClick={() => setDefaultsOpen(!defaultsOpen)}
+        >
+          {defaultsOpen ? "Hide defaults" : "Defaults"}
+        </button>
+      </div>
+
+      {defaultsOpen && (
+        <div className="flex flex-col gap-3 rounded-md border border-border bg-panel2 p-2.5">
+          <p className="text-[11px] leading-relaxed text-muted">
+            Defaults for new and imported clips. Existing clips keep their own settings.
+          </p>
+          <div>
+            <span className="label">Formats</span>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {FORMAT_OPTIONS.map((f) => (
+                <button key={f} className={pill(defaults.formats.includes(f))} onClick={() => toggleDefaultsFormat(f)}>
+                  {f.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="label">MP4 frame rate</span>
+              <select
+                className="input w-full"
+                value={defaults.fps}
+                onChange={(e) => onDefaultsChange({ ...defaults, fps: Number(e.target.value) })}
+              >
+                {MP4_FPS_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f} fps</option>
+                ))}
+              </select>
+            </div>
+            <label className="flex cursor-pointer items-end gap-2 pb-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-[#58a6ff]"
+                checked={defaults.audio}
+                onChange={(e) => onDefaultsChange({ ...defaults, audio: e.target.checked })}
+              />
+              Audio
+            </label>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="label">MP4 quality</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {(["source", "manual"] as const).map((m) => (
+                <button
+                  key={m}
+                  className={pill(defaults.quality.mode === m)}
+                  onClick={() => onDefaultsChange({ ...defaults, quality: { ...defaults.quality, mode: m } })}
+                >
+                  {m}
+                </button>
+              ))}
+              {defaults.quality.mode === "manual" && (
+                <input
+                  type="number"
+                  min={250}
+                  step={50}
+                  className="input w-24 font-mono"
+                  value={defaults.quality.kbit || ""}
+                  placeholder="kbit"
+                  onChange={(e) =>
+                    onDefaultsChange({ ...defaults, quality: { ...defaults.quality, kbit: Number(e.target.value) || 0 } })
+                  }
+                />
+              )}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <span className="label">GIF / AVIF fps</span>
+              <select
+                className="input w-full"
+                value={defaults.anim.fps}
+                onChange={(e) => onDefaultsChange({ ...defaults, anim: { ...defaults.anim, fps: Number(e.target.value) } })}
+              >
+                {ANIM_FPS_OPTIONS.map((f) => (
+                  <option key={f} value={f}>{f} fps</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Size cap</span>
+              <select
+                className="input w-full"
+                value={defaults.anim.maxMB}
+                onChange={(e) => onDefaultsChange({ ...defaults, anim: { ...defaults.anim, maxMB: Number(e.target.value) } })}
+              >
+                {ANIM_MAX_MB_OPTIONS.map((mb) => (
+                  <option key={mb} value={mb}>{mb} MB</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <span className="label">Max edge</span>
+              <select
+                className="input w-full"
+                value={defaults.anim.maxEdge}
+                onChange={(e) => onDefaultsChange({ ...defaults, anim: { ...defaults.anim, maxEdge: Number(e.target.value) } })}
+              >
+                {ANIM_MAX_EDGE_OPTIONS.map((px) => (
+                  <option key={px} value={px}>{px} px</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-1.5">
         <span className="label">Note</span>

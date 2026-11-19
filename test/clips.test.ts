@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { toClip } from "../src/lib/clips";
+import { toClip, toDefaults } from "../src/lib/clips";
 import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, defaultClip } from "../src/lib/types";
 
 const v = { duration: 100, width: 1920, height: 1080 };
@@ -106,4 +106,43 @@ test("the default clip's values are all selectable in the panel", () => {
 
 test("the sharable edges the panel offers are even", () => {
   for (const edge of ANIM_MAX_EDGE_OPTIONS) expect(edge % 2).toBe(0);
+});
+
+test("toDefaults: keeps valid fields", () => {
+  expect(
+    toDefaults({
+      formats: ["gif"],
+      audio: false,
+      fps: 25,
+      quality: { mode: "manual", kbit: 5000 },
+      anim: { fps: 60, maxMB: 25, maxEdge: 512 },
+    })
+  ).toEqual({
+    formats: ["gif"],
+    audio: false,
+    fps: 25,
+    quality: { mode: "manual", kbit: 5000 },
+    anim: { fps: 60, maxMB: 25, maxEdge: 512 },
+  });
+});
+
+test("toDefaults: garbage falls back to the shipped defaults", () => {
+  expect(toDefaults(null)).toEqual({
+    formats: ["mp4", "avif"],
+    audio: true,
+    fps: 60,
+    quality: { mode: "source", kbit: 0 },
+    anim: { fps: 30, maxMB: 48, maxEdge: 1000 },
+  });
+});
+
+test("toDefaults: filters bad formats, falls back when none remain", () => {
+  expect(toDefaults({ formats: ["mp4", "webm"] }).formats).toEqual(["mp4"]);
+  expect(toDefaults({ formats: ["webm"] }).formats).toEqual(["mp4", "avif"]);
+});
+
+test("toDefaults: invalid enums fall back per field", () => {
+  const d = toDefaults({ fps: 99, anim: { fps: 99, maxMB: 99, maxEdge: 99 } });
+  expect(d.fps).toBe(60);
+  expect(d.anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1000 });
 });

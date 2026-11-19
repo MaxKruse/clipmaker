@@ -1,5 +1,5 @@
 import { normalizeCrop } from "./crop";
-import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, newId, type ClipSpec, type Format } from "./types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Format } from "./types";
 
 /** Sanitize an untrusted clip (JSON from the client) into a ClipSpec.
  * Throws with a human-readable message when the clip is unusable. */
@@ -38,5 +38,30 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
     fps,
     quality,
     anim,
+  };
+}
+
+/** Sanitize untrusted new-clip defaults (JSON from the client) into
+ * ClipDefaults: invalid fields fall back to the shipped defaults, so a
+ * hand-edited defaults.json self-heals on save. */
+export function toDefaults(raw: unknown): ClipDefaults {
+  const r = (raw ?? {}) as Record<string, any>;
+  const d = defaultClipDefaults();
+  const formats = (Array.isArray(r.formats) ? r.formats : []).filter((f: unknown) =>
+    FORMAT_OPTIONS.includes(f as Format),
+  );
+  const mode: "source" | "manual" = r?.quality?.mode === "manual" ? "manual" : "source";
+  const kbit = Math.round(Number(r?.quality?.kbit) || 0);
+  return {
+    formats: formats.length > 0 ? formats : [...d.formats],
+    audio: typeof r.audio === "boolean" ? r.audio : d.audio,
+    fps: MP4_FPS_OPTIONS.includes(Number(r.fps)) ? Number(r.fps) : d.fps,
+    // Source mode ignores kbit (it stays 0); manual mode needs the 250 floor.
+    quality: { mode, kbit: mode === "manual" ? Math.max(250, kbit) : kbit },
+    anim: {
+      fps: ANIM_FPS_OPTIONS.includes(Number(r?.anim?.fps)) ? Number(r.anim.fps) : d.anim.fps,
+      maxMB: ANIM_MAX_MB_OPTIONS.includes(Number(r?.anim?.maxMB)) ? Number(r.anim.maxMB) : d.anim.maxMB,
+      maxEdge: ANIM_MAX_EDGE_OPTIONS.includes(Number(r?.anim?.maxEdge)) ? Number(r.anim.maxEdge) : d.anim.maxEdge,
+    },
   };
 }

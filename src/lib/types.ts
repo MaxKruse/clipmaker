@@ -39,6 +39,27 @@ export interface QualityOpts {
   kbit: number;
 }
 
+/** Export options for NEW and imported clips: the ClipSpec fields a
+ * user can preset. Existing clips always keep their own settings. */
+export interface ClipDefaults {
+  formats: Format[];
+  audio: boolean;
+  fps: number;
+  quality: QualityOpts;
+  anim: AnimOpts;
+}
+
+export function defaultClipDefaults(): ClipDefaults {
+  return {
+    // mp4 + avif are the defaults; gif is the opt-in fallback.
+    formats: ["mp4", "avif"],
+    audio: true,
+    fps: 60,
+    quality: { mode: "source", kbit: 0 },
+    anim: { fps: 30, maxMB: 48, maxEdge: 1000 },
+  };
+}
+
 /** One clip: a range of a video plus its export options. */
 export interface ClipSpec {
   id: string;
@@ -84,18 +105,19 @@ export function newId(): string {
   return Math.random().toString(36).slice(2, 10);
 }
 
-export function defaultClip(note = ""): ClipSpec {
+/** A brand-new clip: zeroed range, export options from `d`
+ * (the shipped defaults when omitted). */
+export function defaultClip(note = "", d: ClipDefaults = defaultClipDefaults()): ClipSpec {
   return {
     id: newId(),
     note,
     start: 0,
     end: 5,
     crop: null,
-    // mp4 + avif are the defaults; gif is the opt-in fallback.
-    formats: ["mp4", "avif"],
-    audio: true,
-    fps: 60,
-    quality: { mode: "source", kbit: 0 },
-    anim: { fps: 30, maxMB: 48, maxEdge: 1000 },
+    formats: [...d.formats],
+    audio: d.audio,
+    fps: d.fps,
+    quality: { ...d.quality },
+    anim: { ...d.anim },
   };
 }
