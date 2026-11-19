@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { humanSize } from "@/lib/human";
 import { isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
@@ -142,6 +142,18 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onDismiss]);
 
+  // Focus lands on the close button while the modal is open (the page
+  // underneath is inert for the keyboard), and returns to where it was
+  // when the modal goes away.
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeRef.current?.focus();
+    return () => {
+      if (prev && prev.isConnected) prev.focus();
+    };
+  }, []);
+
   if (jobs.length === 0) return null;
   const active = jobs.filter(isActiveJob);
   const done = jobs.filter((j) => j.status === "done");
@@ -164,7 +176,12 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
         onDismiss();
       }}
     >
-      <div className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export progress"
+        className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl"
+      >
         <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
           <JobStateDot state={allSettled ? (failed.length ? "failed" : "done") : "active"} className="size-5" />
           <div className="min-w-0 flex-1">
@@ -175,7 +192,7 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
               {done.length} done{failed.length > 0 ? ` · ${failed.length} failed` : ""} · {jobs.length} total
             </span>
           </div>
-          <button className="btn" onClick={onDismiss}>
+          <button ref={closeRef} className="btn" onClick={onDismiss}>
             {allSettled ? "close" : "minimize"}
           </button>
         </div>
