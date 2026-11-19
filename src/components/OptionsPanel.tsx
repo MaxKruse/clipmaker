@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { avifDurationLevel } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
 import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
@@ -77,6 +78,8 @@ export function OptionsPanel({
 
   const srcKbit = resolveSourceKbit(video);
   const autoKbit = targetVideoKbit(srcKbit, video.fps, draft.fps);
+  // AVIF encodes are slow: flag long ones (yellow above 45s, red above 60s).
+  const avifLevel = draft.formats.includes("avif") ? avifDurationLevel(draft.end - draft.start) : "none";
 
   const pill = (on: boolean) =>
     on
@@ -200,6 +203,12 @@ export function OptionsPanel({
             Each clip exports two versions: a full-res original, and a size-capped copy in{" "}
             <span className="font-mono">sharable/</span>.
           </p>
+          {avifLevel !== "none" && (
+            <p className={avifLevel === "danger" ? "text-xs leading-relaxed text-danger" : "text-xs leading-relaxed text-warn"}>
+              AVIF: a {Math.round(draft.end - draft.start)}s clip -{" "}
+              {avifLevel === "danger" ? "the AV1 encode will take a long time" : "expect a slow AV1 encode"}.
+            </p>
+          )}
           <div className="grid grid-cols-3 gap-2">
             <div className="flex flex-col gap-1.5">
               <span className="label">Frame rate</span>

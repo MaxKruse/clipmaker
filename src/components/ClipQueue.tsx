@@ -1,5 +1,6 @@
 "use client";
 
+import { avifDurationLevel } from "@/lib/avif";
 import { formatTime } from "@/lib/times";
 import type { ClipSpec } from "@/lib/types";
 
@@ -34,7 +35,9 @@ export function ClipQueue({
             Click "Add clip", then set the times on the timeline and crop the video if you want. Selecting a clip edits it in place.
           </span>
         )}
-        {clips.map((c, i) => (
+        {clips.map((c, i) => {
+          const avifLvl = c.formats.includes("avif") ? avifDurationLevel(c.end - c.start) : "none";
+          return (
           <div
             key={c.id}
             className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 ${
@@ -55,6 +58,18 @@ export function ClipQueue({
                 {f}
               </span>
             ))}
+            {avifLvl !== "none" && (
+              <span
+                className={avifLvl === "danger" ? "chip text-danger" : "chip text-warn"}
+                title={
+                  avifLvl === "danger"
+                    ? "AVIF: a long clip - the AV1 encode will take a long time"
+                    : "AVIF: a long clip - expect a slow AV1 encode"
+                }
+              >
+                slow
+              </span>
+            )}
             <button
               className="btn btn-sm btn-danger"
               onClick={(e) => {
@@ -65,7 +80,8 @@ export function ClipQueue({
               x
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
       {exportError && <span className="mt-2 block shrink-0 text-xs break-words text-danger">{exportError}</span>}
       <div className="mt-3 flex shrink-0 gap-2">
