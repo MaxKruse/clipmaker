@@ -56,8 +56,8 @@ export function Filmstrip({ videoId, onSeek }: Props) {
   const pct = st && st.total > 0 ? Math.round((st.done / st.total) * 100) : 0;
 
   return (
-    <div className="panel flex flex-col gap-2 p-2">
-      <div className="flex items-center justify-between gap-2">
+    <div className="panel flex h-full min-h-0 flex-col gap-2 p-2">
+      <div className="flex shrink-0 items-center justify-between gap-2">
         <span className="label">filmstrip</span>
         <span className="truncate font-mono text-[11px] text-muted">
           {st === null
@@ -68,7 +68,7 @@ export function Filmstrip({ videoId, onSeek }: Props) {
         </span>
       </div>
       {st && !st.ready && (
-        <div className="flex h-14 items-center gap-3 rounded bg-track px-3">
+        <div className="flex min-h-0 flex-1 items-center gap-3 rounded bg-track px-3">
           <div className="h-2 flex-1 overflow-hidden rounded bg-bg/40">
             <div className="h-full rounded bg-accent transition-[width] duration-300" style={{ width: `${pct}%` }} />
           </div>
@@ -76,7 +76,9 @@ export function Filmstrip({ videoId, onSeek }: Props) {
         </div>
       )}
       {st && st.ready && (
-        <div className="scrollbar-thin flex gap-1.5 overflow-x-auto pb-1">
+        /* Thumbnails scale with the strip height (the row is user-
+           resizable); the width keeps the frame's own ratio. */
+        <div className="scrollbar-thin flex min-h-0 flex-1 gap-1.5 overflow-x-auto pb-1">
           {st.frames.map((f) => (
             <button
               key={f.time}
@@ -84,7 +86,7 @@ export function Filmstrip({ videoId, onSeek }: Props) {
               title={`jump to ${formatShort(f.time)}`}
               className="group relative shrink-0 rounded-md border border-border transition-colors hover:border-accent/60"
             >
-              <img src={f.src} alt={formatShort(f.time)} loading="lazy" className="h-16 w-28 rounded-md object-cover" />
+              <img src={f.src} alt={formatShort(f.time)} loading="lazy" className="h-full w-auto min-w-20 max-w-48 rounded-md object-cover" />
               <span className="absolute bottom-0.5 right-1 rounded bg-black/60 px-1 font-mono text-[9px] text-white/90">
                 {formatShort(f.time)}
               </span>
@@ -92,7 +94,7 @@ export function Filmstrip({ videoId, onSeek }: Props) {
           ))}
         </div>
       )}
-      {st === null && <div className="h-14 animate-pulse rounded bg-track" />}
+      {st === null && <div className="min-h-0 flex-1 animate-pulse rounded bg-track" />}
     </div>
   );
 }

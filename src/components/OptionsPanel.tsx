@@ -117,8 +117,11 @@ export function OptionsPanel({
       ? "rounded-full border border-accent/60 bg-accent/15 px-2.5 py-0.5 font-mono text-[11px] text-accent"
       : "chip cursor-pointer hover:border-accent/40";
 
+  // h-full/min-h-0: the panel fills its (possibly user-resized) row;
+  // overflow-y-auto scrolls the form when the row is shorter than the
+  // natural content.
   return (
-    <div data-clip-options className="panel flex shrink-0 flex-col gap-3 p-3">
+    <div data-clip-options className="panel scrollbar-thin flex h-full min-h-0 shrink-0 flex-col gap-3 overflow-y-auto p-3">
       <div className="flex items-center justify-between">
         <span className="label">Clip options</span>
         <button

@@ -25,17 +25,17 @@ export function ClipQueue({
   txtState = "idle",
 }: Props) {
   return (
-    <div data-clips-panel className="panel flex flex-col p-3 xl:min-h-0 xl:flex-1">
+    <div data-clips-panel className="panel flex h-full min-h-0 flex-col p-3">
       <div className="mb-2 flex shrink-0 items-center justify-between">
         <span className="label">Clips ({clips.length})</span>
         <button className={`btn btn-sm ${attnAdd ? "attn" : ""}`} disabled={exporting} onClick={onAdd}>
           Add clip
         </button>
       </div>
-      {/* The list is height-capped (~12 rows) at every size: a long
-       * queue scrolls internally instead of stretching the page, so
-       * the next clip is always a short scroll away. */}
-      <div className="flex max-h-[420px] flex-col gap-1 overflow-y-auto pr-1 xl:min-h-0 xl:flex-1">
+      {/* Below xl the list stays height-capped (~12 rows) so a long
+       * queue scrolls instead of stretching the page; at xl the grid
+       * row already bounds the queue, so the cap is lifted. */}
+      <div className="flex max-h-[420px] min-h-0 flex-col gap-1 overflow-y-auto pr-1 xl:max-h-none xl:flex-1">
         {clips.length === 0 && (
           <span className="text-xs text-muted">
             Click "Add clip", then set the times on the timeline and crop the video if you want. Selecting a clip edits it in place.

@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { ClipQueue } from "@/components/ClipQueue";
 import type { Aspect } from "@/components/CropOverlay";
 import { ExportModal } from "@/components/ExportModal";
 import { ExportPill } from "@/components/ExportPill";
 import { Filmstrip } from "@/components/Filmstrip";
 import { OptionsPanel } from "@/components/OptionsPanel";
+import { Resizer } from "@/components/Resizer";
 import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
 import { useExportView } from "@/components/useExportView";
@@ -14,6 +15,7 @@ import { VideoModal } from "@/components/VideoModal";
 import { initialPlayhead } from "@/lib/clips";
 import type { TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
+import { LAYOUT_LIMITS, defaultLayout, loadLayout, saveLayout, type SeamKey, type WorkLayout } from "@/lib/layout";
 import { isActiveJob } from "@/lib/jobs";
 import { MIN_CLIP_SECONDS, defaultClip, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
@@ -21,6 +23,9 @@ const freshDraft = (v: VideoInfo, d: ClipDefaults): ClipSpec => ({
   ...defaultClip("", d),
   end: Math.max(0.5, Math.min(5, v.duration)),
 });
+
+// localStorage key for the resizable work-area layout.
+const LAYOUT_KEY = "clipmaker.layout.v1";
 
 export default function Page() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
@@ -54,6 +59,19 @@ export default function Page() {
   // The video manager modal (loaded list + add/import) is collapsed behind
   // a single top-bar button so the work area keeps its real estate.
   const [videoModalOpen, setVideoModalOpen] = useState(false);
+  // The work-area layout: right column width plus the stage / filmstrip
+  // / options panel heights (null = natural content height). The seams
+  // between the regions resize it; persisted to localStorage so the
+  // arrangement survives reloads.
+  const [layout, setLayout] = useState<WorkLayout>(() =>
+    loadLayout(() => {
+      try {
+        return window.localStorage.getItem(LAYOUT_KEY);
+      } catch {
+        return null;
+      }
+    }),
+  );
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Clips waiting to reach disk. The debounced timer is cleared when the
   // save effect re-runs (a video switch), so the payload lives here and
@@ -69,6 +87,38 @@ export default function Page() {
       body: p.body,
       keepalive: true,
     }).catch(() => {});
+  };
+
+  // Seam dragging: a panel starts at its natural height, which is only
+  // known by measuring it, so each drag records its start size here and
+  // every move applies the total delta from that base.
+  const stageWrap = useRef<HTMLDivElement | null>(null);
+  const stripWrap = useRef<HTMLDivElement | null>(null);
+  const optsWrap = useRef<HTMLDivElement | null>(null);
+  const seamBase = useRef<Partial<Record<SeamKey, number>>>({});
+
+  const persistLayout = (l: WorkLayout) =>
+    saveLayout((s) => {
+      try {
+        window.localStorage.setItem(LAYOUT_KEY, s);
+      } catch {
+        // storage blocked - the layout stays in memory
+      }
+    }, l);
+
+  const startSeam = (key: SeamKey, el?: RefObject<HTMLDivElement | null>, fallback = 0) => () => {
+    seamBase.current[key] = key === "right" ? layout.right : el?.current?.offsetHeight ?? fallback;
+  };
+  const moveSeam = (key: SeamKey) => (total: number) => {
+    const base = seamBase.current[key];
+    if (base == null) return;
+    const [lo, hi] = LAYOUT_LIMITS[key];
+    setLayout((l) => ({ ...l, [key]: Math.max(lo, Math.min(hi, base + total)) }));
+  };
+  const resetSeam = (key: SeamKey) => () => {
+    const next: WorkLayout = key === "right" ? { ...layout, right: defaultLayout.right } : { ...layout, [key]: null };
+    setLayout(next);
+    persistLayout(next);
   };
 
   const active = videos.find((v) => v.id === activeId) ?? null;
@@ -359,7 +409,7 @@ export default function Page() {
       const el = e.target;
       if (
         el instanceof Element &&
-        el.closest("[data-clips-panel], [data-clip-options], [data-player], button, input, a, select, textarea")
+        el.closest("[data-clips-panel], [data-clip-options], [data-player], [data-layout], button, input, a, select, textarea")
       )
         return;
       leavePreview();
@@ -492,9 +542,24 @@ export default function Page() {
         )}
       </div>
 
+      {/* The work area (xl and up) is a resizable grid: the seam
+          between two regions is a draggable grip (Resizer) - drag
+          to resize, double-click to reset. The sizes feed the grid
+          templates through CSS variables (unset = natural/auto). */}
       {active ? (
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="flex min-w-0 flex-col gap-3">
+        <div
+          className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)] xl:gap-0"
+          style={
+            {
+              "--lm-col": `${layout.right}px`,
+              "--lm-stage": layout.stage ? `${layout.stage}px` : undefined,
+              "--lm-strip": layout.strip ? `${layout.strip}px` : undefined,
+              "--lm-opts": layout.options ? `${layout.options}px` : undefined,
+            } as CSSProperties
+          }
+        >
+          <div className="flex min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-stage,auto)_auto_auto_auto_var(--lm-strip,108px)] xl:gap-0">
+            <div ref={stageWrap} className="min-h-0 min-w-0">
             <Stage
               src={`/api/videos/${active.id}/file`}
               srcW={active.width}
@@ -518,6 +583,15 @@ export default function Page() {
               returnTo={session.returnTo}
               onBack={leavePreview}
               glow={session.step === "crop"}
+              fit={layout.stage !== null}
+            />
+            </div>
+            <Resizer
+              dir="row"
+              onStart={startSeam("stage", stageWrap, 480)}
+              onResize={moveSeam("stage")}
+              onEnd={() => persistLayout(layout)}
+              onReset={resetSeam("stage")}
             />
             <Timeline
               key={active.id}
@@ -538,9 +612,26 @@ export default function Page() {
               glow={session.step === "set-times"}
               focus={session.focus}
             />
+            <Resizer
+              dir="row"
+              onStart={startSeam("strip", stripWrap, 108)}
+              onResize={moveSeam("strip")}
+              onEnd={() => persistLayout(layout)}
+              onReset={resetSeam("strip")}
+            />
+            <div ref={stripWrap} className="min-h-0 min-w-0">
             <Filmstrip videoId={active.id} onSeek={seek} />
+            </div>
           </div>
-          <div className="flex flex-col gap-3">
+          <Resizer
+            dir="col"
+            onStart={startSeam("right")}
+            onResize={moveSeam("right")}
+            onEnd={() => persistLayout(layout)}
+            onReset={resetSeam("right")}
+          />
+          <div className="flex min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-opts,auto)_auto_minmax(0,1fr)] xl:gap-0">
+            <div ref={optsWrap} className="min-h-0 min-w-0">
             <OptionsPanel
               video={active}
               draft={draft}
@@ -552,6 +643,15 @@ export default function Page() {
               onAspect={setAspect}
               onClearCrop={() => updateDraft({ crop: null })}
             />
+            </div>
+            <Resizer
+              dir="row"
+              onStart={startSeam("options", optsWrap, 300)}
+              onResize={moveSeam("options")}
+              onEnd={() => persistLayout(layout)}
+              onReset={resetSeam("options")}
+            />
+            <div className="min-h-0 min-w-0 flex-1">
             <ClipQueue
               clips={activeClips}
               selectedId={selectedId}
@@ -565,6 +665,7 @@ export default function Page() {
               onExportTxt={saveTimestamps}
               txtState={txtState}
             />
+            </div>
           </div>
         </div>
       ) : (

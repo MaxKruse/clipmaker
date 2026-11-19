@@ -31,6 +31,9 @@ interface StageProps {
   onBack: () => void;
   /** Flow step 2: pulse and hint that the optional crop is drawn here. */
   glow?: boolean;
+  /** The panel has a user-set fixed height (layout seam): the video box
+   * fills the leftover height instead of sizing from its 16:9 width. */
+  fit?: boolean;
 }
 
 /** The video player with transport row and the crop overlay. */
@@ -40,7 +43,7 @@ export function Stage(props: StageProps) {
     crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
     returnTo, onBack,
-    glow,
+    glow, fit,
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -117,13 +120,19 @@ export function Stage(props: StageProps) {
   };
 
   return (
-    <div data-player className={`panel relative flex flex-col p-2 ${glow ? "attn" : ""}`}>
+    <div data-player className={`panel relative flex h-full min-h-0 flex-col p-2 ${glow ? "attn" : ""}`}>
       {/* The video box is width-capped: at wide viewports the left
-       * column would otherwise make the player taller than the screen. */}
-      <div className="mx-auto flex w-full max-w-3xl flex-col">
+       * column would otherwise make the player taller than the screen.
+       * With a fixed panel height (fit) the box fills the leftover
+       * height instead of keeping its 16:9 width-driven size. */}
+      <div className={`mx-auto flex w-full max-w-3xl flex-col ${fit ? "h-full min-h-0" : ""}`}>
       <div
         ref={boxRef}
-        className="relative aspect-video w-full overflow-hidden rounded-md bg-black"
+        className={
+          fit
+            ? "relative w-full min-h-0 flex-1 overflow-hidden rounded-md bg-black"
+            : "relative aspect-video w-full overflow-hidden rounded-md bg-black"
+        }
       >
         {glow && (
           <span className="chip pointer-events-none absolute left-2 top-2 z-10">
@@ -154,7 +163,7 @@ export function Stage(props: StageProps) {
       <div
         ref={barRef}
         title="click or drag to scrub"
-        className="group relative my-2 h-2.5 cursor-pointer touch-none select-none rounded-full bg-track"
+        className="group relative my-2 h-2.5 shrink-0 cursor-pointer touch-none select-none rounded-full bg-track"
         onPointerDown={(e) => {
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           setScrubbing(true);
@@ -181,7 +190,7 @@ export function Stage(props: StageProps) {
           style={{ left: `${(time / Math.max(duration, 0.001)) * 100}%` }}
         />
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-1 pb-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-1 pb-1">
         <button className="btn btn-sm" onClick={() => onTogglePlay(!playing)}>
           {playing ? "Pause" : "Play"}
         </button>
