@@ -118,6 +118,9 @@ export function Stage(props: StageProps) {
 
   return (
     <div data-player className={`panel relative flex flex-col p-2 ${glow ? "attn" : ""}`}>
+      {/* The video box is width-capped: at wide viewports the left
+       * column would otherwise make the player taller than the screen. */}
+      <div className="mx-auto flex w-full max-w-3xl flex-col">
       <div
         ref={boxRef}
         className="relative aspect-video w-full overflow-hidden rounded-md bg-black"
@@ -215,6 +218,7 @@ export function Stage(props: StageProps) {
             </button>
           )}
         </div>
+      </div>
       </div>
     </div>
   );

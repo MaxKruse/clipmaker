@@ -29,7 +29,10 @@ export function ClipQueue({
           Add clip
         </button>
       </div>
-      <div className="flex flex-col gap-1 pr-1 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+      {/* The list is height-capped (~12 rows) at every size: a long
+       * queue scrolls internally instead of stretching the page, so
+       * the next clip is always a short scroll away. */}
+      <div className="flex max-h-[420px] flex-col gap-1 overflow-y-auto pr-1 xl:min-h-0 xl:flex-1">
         {clips.length === 0 && (
           <span className="text-xs text-muted">
             Click "Add clip", then set the times on the timeline and crop the video if you want. Selecting a clip edits it in place.
@@ -40,7 +43,7 @@ export function ClipQueue({
           return (
           <div
             key={c.id}
-            className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1.5 ${
+            className={`flex cursor-pointer items-center gap-2 rounded-md border px-2 py-1 ${
               c.id === selectedId
                 ? "border-accent/60 bg-accent/10"
                 : "border-border bg-panel2 hover:border-accent/40"
