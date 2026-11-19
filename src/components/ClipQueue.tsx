@@ -1,6 +1,6 @@
 "use client";
 
-import { avifDurationLevel } from "@/lib/avif";
+import { avifDurationLevel, avifWarningText } from "@/lib/avif";
 import { formatTime } from "@/lib/times";
 import type { ClipSpec } from "@/lib/types";
 
@@ -64,11 +64,7 @@ export function ClipQueue({
             {avifLvl !== "none" && (
               <span
                 className={avifLvl === "danger" ? "chip text-danger" : "chip text-warn"}
-                title={
-                  avifLvl === "danger"
-                    ? "AVIF: a long clip - the AV1 encode will take a long time"
-                    : "AVIF: a long clip - expect a slow AV1 encode"
-                }
+                title={avifWarningText(avifLvl, c.end - c.start)}
               >
                 slow
               </span>

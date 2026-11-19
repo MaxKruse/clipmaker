@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { avifDurationLevel } from "@/lib/avif";
+import { avifDurationLevel, avifWarningText } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
 import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
@@ -328,8 +328,7 @@ export function OptionsPanel({
           </p>
           {avifLevel !== "none" && (
             <p className={avifLevel === "danger" ? "text-xs leading-relaxed text-danger" : "text-xs leading-relaxed text-warn"}>
-              AVIF: a {Math.round(draft.end - draft.start)}s clip -{" "}
-              {avifLevel === "danger" ? "the AV1 encode will take a long time" : "expect a slow AV1 encode"}.
+              {avifWarningText(avifLevel, draft.end - draft.start)}.
             </p>
           )}
           <div className="grid grid-cols-3 gap-2">
