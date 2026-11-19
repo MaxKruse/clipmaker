@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { avifDurationLevel } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
-import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
 import type { Aspect } from "./CropOverlay";
 
 function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) => void }) {
@@ -227,7 +227,7 @@ export function OptionsPanel({
         <div className="flex flex-col gap-1.5">
           <span className="label">In</span>
           {inOut ? (
-            <TimeInput value={inOut.start} onCommit={(t) => onChange({ start: Math.min(t, inOut.end - 0.2) })} />
+            <TimeInput value={inOut.start} onCommit={(t) => onChange({ start: Math.min(t, inOut.end - MIN_CLIP_SECONDS) })} />
           ) : (
             <input className="input w-full font-mono" value="" placeholder="--:--" disabled />
           )}
@@ -235,7 +235,7 @@ export function OptionsPanel({
         <div className="flex flex-col gap-1.5">
           <span className="label">Out</span>
           {inOut ? (
-            <TimeInput value={inOut.end} onCommit={(t) => onChange({ end: Math.max(t, inOut.start + 0.2) })} />
+            <TimeInput value={inOut.end} onCommit={(t) => onChange({ end: Math.max(t, inOut.start + MIN_CLIP_SECONDS) })} />
           ) : (
             <input className="input w-full font-mono" value="" placeholder="--:--" disabled />
           )}

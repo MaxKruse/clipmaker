@@ -41,6 +41,10 @@ export interface QualityOpts {
 
 /** Export options for NEW and imported clips: the ClipSpec fields a
  * user can preset. Existing clips always keep their own settings. */
+/** Minimum clip length in seconds: toClip rejects shorter clips and the
+ * UI (in/out inputs, timeline, import) cannot draw a shorter range. */
+export const MIN_CLIP_SECONDS = 0.2;
+
 export interface ClipDefaults {
   formats: Format[];
   audio: boolean;

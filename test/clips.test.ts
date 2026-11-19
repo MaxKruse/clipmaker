@@ -59,7 +59,9 @@ test("rejects negative start", () => {
 });
 
 test("rejects clips shorter than 0.2s", () => {
-  expect(() => toClip({ start: 10, end: 10.1, formats: ["mp4"] }, v)).toThrow();
+  expect(() => toClip({ start: 10, end: 10.1, formats: ["mp4"] }, v)).toThrow(
+    "clip must be at least 0.2s long",
+  );
 });
 
 test("clamps end to the duration", () => {

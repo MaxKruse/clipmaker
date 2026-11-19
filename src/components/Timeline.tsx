@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { focusWindow, formatShort, formatTime } from "@/lib/times";
+import { MIN_CLIP_SECONDS } from "@/lib/types";
 
 interface Props {
   duration: number;
@@ -190,7 +191,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
     if (!d) return;
     panPos.current = e.clientX;
     const t = tAt(e.clientX);
-    const min = 0.2;
+    const min = MIN_CLIP_SECONDS;
     if (d.kind === "maybe") {
       // A single press seeks (handled in onUp); real movement draws.
       if (Math.abs(e.clientX - d.startX) < 4) return;

@@ -14,7 +14,7 @@ import { VideoLoader } from "@/components/VideoLoader";
 import { clipsTxtForVideo, type TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
 import { isActiveJob } from "@/lib/jobs";
-import { defaultClip, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
+import { MIN_CLIP_SECONDS, defaultClip, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
 
 const freshDraft = (v: VideoInfo, d: ClipDefaults): ClipSpec => ({
   ...defaultClip("", d),
@@ -270,8 +270,8 @@ export default function Page() {
     dispatch({ type: "set-range" });
     seek(t);
     const dur = active?.duration ?? t;
-    const start = Math.max(0, Math.min(t, dur - 0.2));
-    const end = Math.min(dur, Math.max(start + 0.2, draft.end));
+    const start = Math.max(0, Math.min(t, dur - MIN_CLIP_SECONDS));
+    const end = Math.min(dur, Math.max(start + MIN_CLIP_SECONDS, draft.end));
     updateDraft({ start, end });
   };
 
@@ -279,8 +279,8 @@ export default function Page() {
     dispatch({ type: "set-range" });
     seek(t);
     const dur = active?.duration ?? t;
-    const end = Math.max(0.2, Math.min(t, dur));
-    const start = Math.max(0, Math.min(draft.start, end - 0.2));
+    const end = Math.max(MIN_CLIP_SECONDS, Math.min(t, dur));
+    const start = Math.max(0, Math.min(draft.start, end - MIN_CLIP_SECONDS));
     updateDraft({ start, end });
   };
 
@@ -288,8 +288,8 @@ export default function Page() {
   const onDraw = (a: number, b: number) => {
     dispatch({ type: "set-range" });
     const dur = active?.duration ?? b;
-    const start = Math.max(0, Math.min(a, dur - 0.2));
-    const end = Math.min(dur, Math.max(b, start + 0.2));
+    const start = Math.max(0, Math.min(a, dur - MIN_CLIP_SECONDS));
+    const end = Math.min(dur, Math.max(b, start + MIN_CLIP_SECONDS));
     updateDraft({ start, end });
   };
 
@@ -363,7 +363,7 @@ export default function Page() {
       crop: draft.crop ? { ...draft.crop } : null,
     };
     if (!hasRange) {
-      c.start = Math.max(0, Math.min(time, active.duration - 0.2));
+      c.start = Math.max(0, Math.min(time, active.duration - MIN_CLIP_SECONDS));
       c.end = Math.min(active.duration, c.start + 5);
     }
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), c] }));
@@ -381,7 +381,7 @@ export default function Page() {
         start: r.start,
         end: Math.min(r.end, active.duration),
       }))
-      .filter((c) => c.start < active.duration && c.end - c.start > 0.2);
+      .filter((c) => c.start < active.duration && c.end - c.start > MIN_CLIP_SECONDS);
     if (!list.length) return;
     setClips((all) => ({ ...all, [activeId]: [...(all[activeId] ?? []), ...list] }));
     dispatch({ type: "imported" });

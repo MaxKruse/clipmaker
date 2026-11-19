@@ -1,5 +1,5 @@
 import { normalizeCrop } from "./crop";
-import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Format } from "./types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Format } from "./types";
 
 /** Sanitize an untrusted clip (JSON from the client) into a ClipSpec.
  * Throws with a human-readable message when the clip is unusable. */
@@ -11,7 +11,8 @@ export function toClip(raw: unknown, v: { duration: number; width: number; heigh
   if (start < 0) throw new Error("clip start must be >= 0");
   // Allow a small overshoot: the element duration can differ from the probe's.
   end = Math.min(end, v.duration + 0.5);
-  if (end - start < 0.2) throw new Error("clip must be at least 0.2s long");
+  if (end - start < MIN_CLIP_SECONDS)
+    throw new Error(`clip must be at least ${MIN_CLIP_SECONDS}s long`);
   const formats = (Array.isArray(r.formats) ? r.formats : []).filter((f: unknown) => FORMAT_OPTIONS.includes(f as Format));
   if (formats.length === 0) throw new Error("pick at least one format");
   const fps = MP4_FPS_OPTIONS.includes(Number(r.fps)) ? Number(r.fps) : 60;
