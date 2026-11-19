@@ -113,7 +113,11 @@ export default function Page() {
     const base = seamBase.current[key];
     if (base == null) return;
     const [lo, hi] = LAYOUT_LIMITS[key];
-    setLayout((l) => ({ ...l, [key]: Math.max(lo, Math.min(hi, base + total)) }));
+    // Stage and options sit above their seam, so they grow with the
+    // drag; the filmstrip and the right column sit on the far side of
+    // their seam, so the same drag shrinks them.
+    const delta = key === "strip" || key === "right" ? -total : total;
+    setLayout((l) => ({ ...l, [key]: Math.max(lo, Math.min(hi, base + delta)) }));
   };
   const resetSeam = (key: SeamKey) => () => {
     const next: WorkLayout = key === "right" ? { ...layout, right: defaultLayout.right } : { ...layout, [key]: null };

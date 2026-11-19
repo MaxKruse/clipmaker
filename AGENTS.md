@@ -358,7 +358,9 @@ Key invariants:
   drag start (`offsetHeight`, measured; the column width comes from
   `layout.right`) and applies the total pointer delta clamped by
   `LAYOUT_LIMITS` (right 280-800, stage 140-1200, strip 72-320,
-  options 96-900). Double-click resets that region to its natural
+  options 96-900). Direction follows the seam: a region above/left of
+  its seam (stage, options) grows with the drag, a region below/right
+  of it (filmstrip, right column) shrinks with it. Double-click resets that region to its natural
   size. The sizes live in `layout` state (a `WorkLayout`:
   `right` number, `stage`/`strip`/`options` number-or-null, null =
   natural height) and feed the grid templates through CSS variables:
