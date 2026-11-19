@@ -54,7 +54,8 @@ bun run dev
 
 Then open **http://localhost:10100**.
 
-For a production build: `bun run build && bun run start` (same port).
+For the optimized version: `bun run prod` (builds, then starts - same
+port).
 
 ## How to use it
 

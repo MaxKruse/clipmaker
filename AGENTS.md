@@ -464,7 +464,8 @@ Key invariants:
   output to real temp files.
 - The dev server runs natively on :10100 (not Docker) because it needs
   local video paths and the local NVENC GPU. Long-lived processes must
-  be killed by PID, never by image name.
+  be killed by PID, never by image name. The optimized version is
+  `bun run prod` (`next build` then `next start`, same :10100 port).
 
 ## Verification
 
