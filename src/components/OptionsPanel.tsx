@@ -3,15 +3,15 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { avifDurationLevel, avifWarningText } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
-import { parseTime } from "@/lib/times";
+import { formatTime, parseTime } from "@/lib/times";
 import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, toggleFormatIn, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
 import type { Aspect } from "./CropOverlay";
 
 function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) => void }) {
-  const [txt, setTxt] = useState(value.toFixed(2));
+  const [txt, setTxt] = useState(formatTime(value));
   const focused = useRef(false);
   useEffect(() => {
-    if (!focused.current) setTxt(value.toFixed(2));
+    if (!focused.current) setTxt(formatTime(value));
   }, [value]);
   const commit = () => {
     let t = NaN;
@@ -21,17 +21,17 @@ function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) =
       // fall back to the last good value
     }
     if (Number.isFinite(t)) {
-      setTxt(t.toFixed(2));
+      setTxt(formatTime(t));
       if (Math.abs(t - value) > 1e-6) onCommit(t);
     } else {
-      setTxt(value.toFixed(2));
+      setTxt(formatTime(value));
     }
   };
   return (
     <input
       className="input w-full font-mono"
       value={txt}
-      placeholder="seconds"
+      placeholder="m:ss.mmm"
       onFocus={() => (focused.current = true)}
       onChange={(e) => setTxt(e.target.value)}
       onBlur={() => {
@@ -52,6 +52,29 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     <div className="flex flex-col gap-2 border-t border-border pt-3">
       <span className="label">{title}</span>
       {children}
+    </div>
+  );
+}
+
+/** A collapsible titled group: the summary line stays visible so the
+ * current settings read at a glance; click to expand the controls.
+ * Used for the format-detail sections to keep the rail short. */
+function Collapsible({ title, summary, children }: { title: string; summary: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border-t border-border pt-3">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 text-left"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="label">{title}</span>
+        <span className="flex items-center gap-2">
+          <span className="font-mono text-[11px] text-muted">{summary}</span>
+          <span className={`text-muted transition-transform duration-150 ${open ? "rotate-90" : ""}`}>&#8250;</span>
+        </span>
+      </button>
+      {open && <div className="mt-2 flex flex-col gap-2">{children}</div>}
     </div>
   );
 }
@@ -263,7 +286,10 @@ export function OptionsPanel({
       </Section>
 
       {draft.formats.includes("mp4") && (
-        <Section title="MP4 video">
+        <Collapsible
+          title="MP4 video"
+          summary={`${draft.fps} fps · ${draft.quality.mode === "source" ? "~" + autoKbit + "k" : draft.quality.kbit + "k"} · ${draft.audio && video.hasAudio ? "audio" : "no audio"}`}
+        >
           <div className="grid grid-cols-2 gap-2">
             <div className="flex flex-col gap-1.5">
               <span className="label">Frame rate</span>
@@ -316,11 +342,14 @@ export function OptionsPanel({
               )}
             </div>
           </div>
-        </Section>
+        </Collapsible>
       )}
 
       {(draft.formats.includes("gif") || draft.formats.includes("avif")) && (
-        <Section title="GIF / AVIF">
+        <Collapsible
+          title="GIF / AVIF"
+          summary={`${draft.anim.fps} fps · ${draft.anim.maxMB} MB cap · ${draft.anim.maxEdge} px`}
+        >
           <p className="text-xs leading-relaxed text-muted">
             Each clip exports two versions: a full-res original, and a size-capped copy in{" "}
             <span className="font-mono">sharable/</span>.
@@ -368,7 +397,7 @@ export function OptionsPanel({
               </select>
             </div>
           </div>
-        </Section>
+        </Collapsible>
       )}
 
       <Section title="Crop">

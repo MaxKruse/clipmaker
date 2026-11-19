@@ -189,7 +189,7 @@ export function Stage(props: StageProps) {
         <button className="btn btn-sm" onClick={() => onSeek(time + 1 / fps)}>+1f</button>
         <button className="btn btn-sm" onClick={() => onIn(time)}>In (I)</button>
         <button className="btn btn-sm" onClick={() => onOut(time)}>Out (O)</button>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="group/vol ml-auto flex items-center gap-2">
           <button className="btn btn-sm" onClick={() => setMuted(!muted)}>
             {muted ? "Unmute" : "Mute"}
           </button>
@@ -203,7 +203,7 @@ export function Stage(props: StageProps) {
               setMuted(false);
             }}
             aria-label="Volume"
-            className="w-24 accent-accent"
+            className="w-24 accent-accent opacity-0 transition-opacity duration-150 group-hover/vol:opacity-100"
           />
           <span className="font-mono text-xs text-muted">
             {formatTime(time)} / {formatTime(duration)}

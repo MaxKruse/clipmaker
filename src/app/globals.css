@@ -66,3 +66,24 @@ body {
       0 0 20px 2px color-mix(in srgb, var(--color-accent) 45%, transparent);
   }
 }
+
+/* Thin, token-colored scrollbar for horizontal strips (the filmstrip).
+   Replaces the chunky platform default so the row stays unobtrusive. */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted);
+}

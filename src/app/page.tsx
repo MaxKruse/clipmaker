@@ -2,16 +2,17 @@
 
 import { useEffect, useReducer, useRef, useState } from "react";
 import { ClipQueue } from "@/components/ClipQueue";
-import { CropPreview } from "@/components/CropPreview";
 import type { Aspect } from "@/components/CropOverlay";
 import { ExportModal } from "@/components/ExportModal";
 import { ExportPill } from "@/components/ExportPill";
+import { Filmstrip } from "@/components/Filmstrip";
 import { OptionsPanel } from "@/components/OptionsPanel";
 import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
 import { useExportView } from "@/components/useExportView";
-import { VideoLoader } from "@/components/VideoLoader";
-import { clipsTxtForVideo, type TxtClip } from "@/lib/clipsTxt";
+import { VideoModal } from "@/components/VideoModal";
+import { initialPlayhead } from "@/lib/clips";
+import type { TxtClip } from "@/lib/clipsTxt";
 import { clipSessionReducer, initialClipSession } from "@/lib/clipSession";
 import { isActiveJob } from "@/lib/jobs";
 import { MIN_CLIP_SECONDS, defaultClip, defaultClipDefaults, newId, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "@/lib/types";
@@ -46,8 +47,13 @@ export default function Page() {
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  // Save-timestamps action feedback (drives the ClipQueue button label).
+  const [txtState, setTxtState] = useState<"idle" | "saving" | "saved">("idle");
   // What the page-load ingest sweep did (null when it found nothing).
   const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  // The video manager modal (loaded list + add/import) is collapsed behind
+  // a single top-bar button so the work area keeps its real estate.
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Clips waiting to reach disk. The debounced timer is cleared when the
   // save effect re-runs (a video switch), so the payload lives here and
@@ -129,6 +135,21 @@ export default function Page() {
         if (!alive) return;
         setClips((all) => ({ ...all, [id]: j.clips ?? [] }));
         setClipsLoadedFor(id);
+        // Land the playhead on the first clip (not the boring 0:00) as soon
+        // as the project file lands and the video element is ready. No clips
+        // means 0, which is already where the video starts.
+        const v = videoRef.current;
+        const video = videos.find((x) => x.id === id);
+        if (v && video) {
+          const t = initialPlayhead(j.clips ?? [], video.duration);
+          const apply = () => {
+            if (!alive) return;
+            v.currentTime = t;
+            setTime(t);
+          };
+          if (v.readyState >= 1) apply();
+          else v.addEventListener("loadedmetadata", apply, { once: true });
+        }
       })
       .catch(() => {});
     return () => {
@@ -416,22 +437,21 @@ export default function Page() {
     }
   };
 
-  // Download the active video's clips as a clips.txt file (client-side,
-  // no server round trip): the # header keeps the file round-tripping
-  // through the import on the other side.
-  const exportClipsTxt = () => {
+  // Save the active video's clips to out/<videoId>/timestamps.txt on disk
+  // (one line per clip, no header line). The ClipQueue button shows
+  // saving/saved feedback while it runs.
+  const saveTimestamps = async () => {
     if (!active || activeClips.length === 0) return;
-    const text = clipsTxtForVideo(active.name, activeClips);
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const base = active.name.replace(/\.[a-z0-9]+$/i, "") || active.name;
-    a.href = url;
-    a.download = `${base}.clips.txt`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    setTxtState("saving");
+    try {
+      const res = await fetch(`/api/videos/${active.id}/timestamps`, { method: "POST" });
+      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+      setTxtState("saved");
+      window.setTimeout(() => setTxtState("idle"), 2000);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+      setTxtState("idle");
+    }
   };
 
   const clearFinished = () => {
@@ -459,28 +479,18 @@ export default function Page() {
 
   return (
     <div className="flex min-h-screen flex-col gap-3 p-4">
-      <header className="flex flex-wrap items-baseline gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">clipmaker</h1>
-        <span className="chip">local video clip editor</span>
-        <span className="ml-auto font-mono text-[11px] text-muted">
-          space play/pause &middot; I/O in-out &middot; arrows seek &middot; shift+arrow = 1 frame &middot; esc back
-        </span>
-      </header>
-
-      <VideoLoader
-        videos={videos}
-        activeId={activeId}
-        onSelect={(id) => selectVideo(id)}
-        onRemove={removeVideo}
-        activeName={active?.name ?? null}
-        onAdded={onAdded}
-        onLoadClips={importClips}
-      />
-      {ingestMsg && (
-        <span className={`-mt-1 px-1 text-xs break-words ${ingestMsg.ok ? "text-ok" : "text-danger"}`}>
-          {ingestMsg.text}
-        </span>
-      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <button className="btn btn-sm min-w-0 max-w-full" onClick={() => setVideoModalOpen(true)}>
+          <span className="min-w-0 max-w-[520px] truncate">
+            {active ? active.name : "load a video"}
+          </span>
+        </button>
+        {ingestMsg && (
+          <span className={`text-xs break-words ${ingestMsg.ok ? "text-ok" : "text-danger"}`}>
+            {ingestMsg.text}
+          </span>
+        )}
+      </div>
 
       {active ? (
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -528,7 +538,7 @@ export default function Page() {
               glow={session.step === "set-times"}
               focus={session.focus}
             />
-            <CropPreview videoId={active.id} time={time} crop={draft.crop} playing={playing} />
+            <Filmstrip videoId={active.id} onSeek={seek} />
           </div>
           <div className="flex flex-col gap-3">
             <OptionsPanel
@@ -552,7 +562,8 @@ export default function Page() {
               onSelect={selectClip}
               onDelete={deleteClip}
               onExport={exportAll}
-              onExportTxt={exportClipsTxt}
+              onExportTxt={saveTimestamps}
+              txtState={txtState}
             />
           </div>
         </div>
@@ -565,6 +576,21 @@ export default function Page() {
         <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} onCancel={cancelOne} />
       ) : (
         <ExportPill jobs={jobs} onView={exportView.show} />
+      )}
+      {videoModalOpen && (
+        <VideoModal
+          onClose={() => setVideoModalOpen(false)}
+          videos={videos}
+          activeId={activeId}
+          onSelect={(id) => {
+            selectVideo(id);
+            setVideoModalOpen(false);
+          }}
+          onRemove={removeVideo}
+          activeName={active?.name ?? null}
+          onAdded={onAdded}
+          onLoadClips={importClips}
+        />
       )}
     </div>
   );

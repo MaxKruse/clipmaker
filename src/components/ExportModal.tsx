@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { humanSize } from "@/lib/human";
-import { isActiveJob, resolveTier } from "@/lib/jobs";
+import { batchTimeLabel, groupBatches, isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
@@ -100,8 +100,12 @@ function JobRow({ job, onCancel }: { job: Job; onCancel?: (id: string) => void }
         <div className="flex flex-wrap gap-1.5">
           {job.outputs.map((o) => {
             const tier = resolveTier(o);
+            // Label the two gif/avif versions (full vs sharable); a lone
+            // mp4 output has nothing to be confused with.
+            const ambiguous = job.outputs.filter((x) => x.kind === o.kind).length > 1;
             return (
               <a key={o.name} className="btn btn-sm" href={`/api/jobs/${job.id}/file?k=${o.kind}&t=${tier}`} download>
+                {ambiguous && <span className="chip">{tier}</span>}
                 <span className="font-mono">{o.name.split("/").pop()}</span>
                 <span className="text-muted">{humanSize(o.size)}</span>
               </a>
@@ -162,6 +166,12 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
   // Overall = mean of per-job progress (done counts as 1).
   const overall =
     jobs.reduce((s, j) => s + (j.status === "done" ? 1 : j.status === "error" ? 0 : j.pct), 0) / jobs.length;
+  // Batches share one createdAt stamp; re-exporting the same clip makes
+  // duplicate "#N note" rows, so group them and label each batch by time.
+  const batches = groupBatches(jobs);
+  const hasTiers = jobs.some((j) =>
+    j.outputs.some((o) => j.outputs.filter((x) => x.kind === o.kind).length > 1),
+  );
 
   return (
     <div
@@ -210,8 +220,25 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
         </div>
 
         <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-          {jobs.map((j) => (
-            <JobRow key={j.id} job={j} onCancel={onCancel} />
+          {hasTiers && (
+            <p className="text-[11px] leading-relaxed text-muted">
+              full = full resolution &middot; sharable = size-capped copy (in sharable/)
+            </p>
+          )}
+          {batches.map((batch, i) => (
+            <div key={batch[0].createdAt} className="flex flex-col gap-2.5">
+              {batches.length > 1 && (
+                <span className="label flex items-center gap-2">
+                  batch {i + 1}/{batches.length}
+                  <span className="font-mono text-[10px] font-normal text-muted">
+                    {batchTimeLabel(batch[0].createdAt)}
+                  </span>
+                </span>
+              )}
+              {batch.map((j) => (
+                <JobRow key={j.id} job={j} onCancel={onCancel} />
+              ))}
+            </div>
           ))}
         </div>
 

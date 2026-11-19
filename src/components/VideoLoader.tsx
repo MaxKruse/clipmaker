@@ -112,7 +112,7 @@ export function VideoLoader({
   };
 
   return (
-    <div className="panel flex flex-col gap-2 p-2">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={Boolean(busy)}>
           Upload file
@@ -166,6 +166,7 @@ export function VideoLoader({
           {videos.map((v) => (
             <span
               key={v.id}
+              title={v.name}
               className={`group flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs ${
                 v.id === activeId
                   ? "border-accent/70 bg-accent/15 text-fg"

@@ -16,10 +16,13 @@ interface Props {
   onDelete: (id: string) => void;
   onExport: () => void;
   onExportTxt: () => void;
+  /** Save-timestamps action feedback (button label flips while it runs). */
+  txtState?: "idle" | "saving" | "saved";
 }
 
 export function ClipQueue({
   clips, selectedId, exporting, exportError, attnAdd, onAdd, onSelect, onDelete, onExport, onExportTxt,
+  txtState = "idle",
 }: Props) {
   return (
     <div data-clips-panel className="panel flex flex-col p-3 xl:min-h-0 xl:flex-1">
@@ -97,11 +100,11 @@ export function ClipQueue({
         </button>
         <button
           className="btn btn-sm shrink-0 self-center"
-          disabled={clips.length === 0}
+          disabled={clips.length === 0 || txtState === "saving"}
           onClick={onExportTxt}
-          title="Download a clips.txt with the current timestamps and notes"
+          title="Save the current timestamps to out/<video>/timestamps.txt (one line per clip, no header)"
         >
-          clips.txt
+          {txtState === "saving" ? "saving..." : txtState === "saved" ? "saved" : "timestamps"}
         </button>
       </div>
     </div>

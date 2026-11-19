@@ -246,6 +246,12 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
       {glow && (
         <span className="chip pointer-events-none absolute left-1 top-1 z-10">drag to set the times</span>
       )}
+      {/* Empty-state hint: no range yet and not in the guided flow. */}
+      {!glow && inPoint == null && outPoint == null && (
+        <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap font-mono text-[11px] text-white/40">
+          click to seek &middot; drag to draw the in/out range
+        </span>
+      )}
       {inPoint != null && outPoint != null && (
         <>
           <div
