@@ -1,5 +1,17 @@
 import { expect, test } from "bun:test";
-import { defaultClip, defaultClipDefaults } from "../src/lib/types";
+import { defaultClip, defaultClipDefaults, toggleFormatIn } from "../src/lib/types";
+
+test("toggleFormatIn: adds an unselected format", () => {
+  expect(toggleFormatIn(["mp4"], "gif")).toEqual(["mp4", "gif"]);
+});
+
+test("toggleFormatIn: removes a selected format", () => {
+  expect(toggleFormatIn(["mp4", "avif"], "mp4")).toEqual(["avif"]);
+});
+
+test("toggleFormatIn: null when the only format would be removed", () => {
+  expect(toggleFormatIn(["mp4"], "mp4")).toBeNull();
+});
 
 test("defaultClip: MP4 defaults to 60 fps", () => {
   expect(defaultClip().fps).toBe(60);

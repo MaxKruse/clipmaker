@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { avifDurationLevel, avifWarningText } from "@/lib/avif";
 import { resolveSourceKbit, targetVideoKbit } from "@/lib/bitrate";
 import { parseTime } from "@/lib/times";
-import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
+import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MIN_CLIP_SECONDS, MP4_FPS_OPTIONS, toggleFormatIn, type ClipDefaults, type ClipSpec, type Format, type VideoInfo } from "@/lib/types";
 import type { Aspect } from "./CropOverlay";
 
 function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) => void }) {
@@ -74,15 +74,14 @@ export function OptionsPanel({
   video, draft, inOut, aspect, defaults, onChange, onDefaultsChange, onAspect, onClearCrop,
 }: Props) {
   const [defaultsOpen, setDefaultsOpen] = useState(false);
+  // toggleFormatIn keeps at least one format (null = no change).
   const toggleFormat = (f: Format) => {
-    const has = draft.formats.includes(f);
-    if (has && draft.formats.length === 1) return; // at least one format
-    onChange({ formats: has ? draft.formats.filter((x) => x !== f) : [...draft.formats, f] });
+    const formats = toggleFormatIn(draft.formats, f);
+    if (formats) onChange({ formats });
   };
   const toggleDefaultsFormat = (f: Format) => {
-    const has = defaults.formats.includes(f);
-    if (has && defaults.formats.length === 1) return; // at least one format
-    onDefaultsChange({ ...defaults, formats: has ? defaults.formats.filter((x) => x !== f) : [...defaults.formats, f] });
+    const formats = toggleFormatIn(defaults.formats, f);
+    if (formats) onDefaultsChange({ ...defaults, formats });
   };
 
   const srcKbit = resolveSourceKbit(video);

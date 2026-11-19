@@ -5,6 +5,17 @@ export type Format = "mp4" | "gif" | "avif";
 
 /** Selectable values, shared by the clip validator and the options panel. */
 export const FORMAT_OPTIONS: Format[] = ["mp4", "gif", "avif"];
+
+/** Toggle a format in a format list, keeping at least one format.
+ * Returns null when the list cannot change (removing the last format). */
+export function toggleFormatIn(formats: Format[], f: Format): Format[] | null {
+  if (formats.includes(f)) {
+    const rest = formats.filter((x) => x !== f);
+    return rest.length ? rest : null;
+  }
+  return [...formats, f];
+}
+
 export const MP4_FPS_OPTIONS = [25, 30, 60];
 export const ANIM_FPS_OPTIONS = [15, 20, 25, 30, 60];
 export const ANIM_MAX_MB_OPTIONS = [10, 25, 48];
