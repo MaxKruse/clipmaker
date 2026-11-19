@@ -10,14 +10,16 @@ size-capped "sharable" copy that fits the cap you set.
 Everything runs on your machine: the video files never leave it, and
 exports are encoded with your local `ffmpeg` (NVENC GPU encoding is
 used automatically when available). Your clip lists are saved per
-video as project files (`.data/clips.json`) and survive reloads and
+video as project files (`.data/clips.json`), and your default export
+settings for new clips (`.data/defaults.json`) survive reloads and
 restarts.
 
 ## At a glance
 
 ![](docs/screenshot-1-add.png)
 
-Freshly loaded: the video plays on the left, the clip queue is on the
+Freshly loaded: the video plays on the left (the player is width-capped
+so it stays a sensible size on wide screens), the clip queue is on the
 right. "Add clip" glows until you pick a starting point.
 
 ![](docs/screenshot-2-times.png)
@@ -70,6 +72,9 @@ For a production build: `bun run build && bun run start` (same port).
    view, and double-click (or the `fit` button) returns to the whole
    video. While dragging the range near a track edge, the view
    auto-scrolls, so you can carry a clip across the whole video.
+   While you drag the in/out handles (or draw a new range), playback is
+   temporarily paused so the frame under your pointer stays exactly
+   where you put it; if it was playing, it resumes when you let go.
 3. **Crop (optional)** - click and drag a rectangle over the video (a
    plain click plants a small crop at that point). You can move it,
    resize it from any of the 8 handles, and lock the aspect ratio
@@ -88,7 +93,10 @@ For a production build: `bun run build && bun run start` (same port).
    the max edge just keeps the best resolution it has. The full-res
    original is always exported with it, no cap. AVIF encodes are slow,
    so a clip that includes AVIF warns in yellow once it is longer than
-   45 seconds and in red above 60 seconds.
+   45 seconds and in red above 60 seconds. The **Defaults** button at
+   the top of the clip options panel sets these options once for all
+   new and imported clips (persisted in `.data/defaults.json`);
+   existing clips always keep their own settings.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -122,6 +130,8 @@ deselect the clip.
 
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
 `shift` + `left`/`right` = one frame, `esc` back from a clip preview (deselects it).
+The arrow keys still seek the video even when a button (e.g. a format
+pill) has focus.
 
 ## Clips from a notes file
 
@@ -151,8 +161,9 @@ File format - one clip per line:
   clamped to the video's length.
 
 Imported clips get the default settings (MP4 + AVIF, audio on, MP4 at
-60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
-queue before export.
+60 fps, GIF/AVIF at 30 fps - configurable via the **Defaults** button
+in the clip options) and can be adjusted individually in the queue
+before export.
 
 The other direction works too: the **"clips.txt"** button next to the
 Export button in the clip queue downloads your current clip list as a
@@ -207,8 +218,9 @@ If the original must stay in place, use "Add by path" instead.
   encodes are slower than GIFs but far smaller at the same quality.
   The sharable AVIF copy shrinks the same way as the sharable GIF -
   size and frame rate first, then quality.
-- Session data (loaded videos, clip lists, job history) lives in
-  `.data/`; running jobs are not resumable after a server restart.
+- Session data (loaded videos, clip lists, job history, new-clip
+  defaults) lives in `.data/`; running jobs are not resumable after a
+  server restart.
 - The web UI needs a browser with `fetch` streaming for uploads; it is
   tested in Chromium.
 

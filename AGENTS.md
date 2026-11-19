@@ -33,13 +33,17 @@ src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
                     inverse clipsTxtForVideo serializer (round trip pinned
                     by test/clipsTxt.test.ts)
+src/lib/clips.ts    client-side sanitizers: toClip (untrusted clip -> ClipSpec) and
+                    toDefaults (untrusted defaults -> ClipDefaults, field-wise
+                    fallback to the shipped defaults)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
 src/lib/avif.ts       avifDurationLevel - length-based AVIF encode warning (45s/60s)
-src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
+src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, ProbeResult +
+                    defaultClip(note, defaults) / defaultClipDefaults()
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
 src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
@@ -97,10 +101,15 @@ Key invariants:
   applies to GIF/AVIF - `fps` is the shared intermediate's frame rate
   and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
   options 256-1440; the ladder is capped at the source/crop width and
-  never upscales). New and imported clips default to
-  `formats: ["mp4", "avif"]` (gif is the opt-in fallback) and
-  `maxEdge: 1000`; the rest of the defaults are in
-  `types.ts:defaultClip()`.
+  never upscales). New and imported clips are created by
+  `defaultClip(note, defaults)` from the user's persisted
+  `ClipDefaults` (shipped values: `formats: ["mp4", "avif"]`,
+  `maxEdge: 1000`; the rest in `types.ts:defaultClipDefaults()`).
+- `ClipDefaults { formats, audio, fps, quality, anim }` - the export
+  options new and imported clips are created with; user-editable via
+  the Defaults toggle in the OptionsPanel, persisted in
+  `.data/defaults.json`, validated by `toDefaults` (lib/clips.ts).
+  Existing clips keep their own settings.
 - `Job { id, videoId, videoName, clip, clipNo, status, stage, pct,
   outputs, warning?, error?, createdAt }` - `status` is queued/running/
   done/error. `stage` is the structured `JobStage` (stages.ts) while
@@ -113,6 +122,9 @@ Key invariants:
 ## Disk layout (all gitignored, created lazily)
 
 - `.data/videos.json`, `.data/jobs.json` - persisted session state.
+- `.data/defaults.json` - new-clip defaults (`ClipDefaults`); created
+  on first save, loaded through `toDefaults` so a corrupt file
+  self-heals to the shipped defaults.
 - `uploads/<videoId>/<name>` - uploaded files.
 - `ingest/` - drop folder for huge files. Not created by the app (the
   user creates it, optionally at another location via
@@ -187,6 +199,10 @@ Key invariants:
   `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
   GET re-runs stored rows through `toClip`, so legacy shapes (the old
   `gif` key) self-migrate to `anim` on read.
+- `GET/PUT /api/defaults` - the new-clip defaults: GET returns the
+  `ClipDefaults` object directly; PUT sanitizes the body through
+  `toDefaults`, persists it to `.data/defaults.json`, and returns
+  `{ok: true}`.
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
   <=480px; `time` is floored to the frame grid, the same frame the
   export will cut at.
@@ -234,6 +250,21 @@ Key invariants:
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
+- **Player size**: the Stage centers its content (video box + scrub
+  bar + transport row) in a `max-w-3xl` (768px) wrapper, so the player
+  never grows with the panel on wide screens.
+- **Keyboard**: the Stage keydown listener ignores INPUT/TEXTAREA/
+  SELECT so typing in the In/Out/note inputs stays native; a focused
+  BUTTON passes only ArrowLeft/ArrowRight through to the seek handler
+  (space/I/O/Esc keep native button behavior).
+- **Range-drag pauses playback**: while an in/out handle, a range
+  move, or a new-range draw is in progress, the Timeline reports it
+  via its `onDragChange` prop; the page pauses playback (only if it
+  was playing) and restores the playing state on release, so the frame
+  under the pointer is the exact frame the clip will start on.
+- **Clip list scroll cap**: the queue list is capped at 420px (~12
+  rows) and scrolls internally at every breakpoint
+  (`max-h-[420px]`); rows are compact (`py-1`).
 - The stage measures its frame with a ResizeObserver. The crop overlay
   covers the whole stage and is always active: every pointer event on
   the video crops (click = plant, drag = draw, move, 8 resize handles);
@@ -303,8 +334,9 @@ Key invariants:
   Timeline, CropPreview; the right column stacks OptionsPanel (natural
   height) over ClipQueue, and the grid stretches the right column to
   the left column's height so ClipQueue (`xl:flex-1`) fills it and the
-  clip list scrolls inside. Below `xl` everything is one column and
-  the clip list renders at natural height. Export progress is not in
+  clip list scrolls inside (the list itself is capped at 420px at
+  every size - see the clip list scroll cap bullet above). Below `xl`
+  everything is one column. Export progress is not in
   the layout flow at all: a front-and-center modal (ExportModal) with
   a bottom-right pill (ExportPill) as its minimized form; both hide
   themselves when no job exists.
@@ -332,6 +364,18 @@ Key invariants:
   quality) renders only when the clip's formats include mp4, and the
   the GIF / AVIF section (frame rate, sharable size cap, sharable max
   edge) only when gif/avif is selected.
+- **Defaults menu**: the OptionsPanel header row (next to the
+  "Clip options" label) has a `Defaults` toggle (active:
+  `border-accent/60 text-accent`) that opens a `bg-panel2` section
+  for the new-clip settings: format pills (at least one kept by
+  `toggleDefaultsFormat`), MP4 frame rate, audio, MP4 quality
+  (source/manual + kbit), and GIF/AVIF frame rate / size cap / max
+  edge. Every change PUTs `/api/defaults` immediately (no debounce);
+  the page fetches the object on mount. New drafts (`freshDraft` in
+  page.tsx) and imported clips are created via
+  `defaultClip(note, defaults)`; existing clips keep their own
+  settings, and "Add clip" with a clip selected still copies that
+  clip's draft (the draft model is unchanged).
 - **AVIF duration warning**: AV1 encodes are slow, so a clip whose
   formats include avif warns by length - yellow (`text-warn`) above 45s,
   red (`text-danger`) above 60s. The OptionsPanel shows it in the
@@ -377,9 +421,9 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 156 unit tests over the pure libs (times, bitrate,
-  avif, ladder, names, crop, args, clipsTxt, clips, jobs, stages,
-  exportView, clipSession, ingest, ffmpeg's once).
+- `bun test` - 163 unit tests over the pure libs (times, bitrate,
+  avif, ladder, names, crop, args, clipsTxt, clips, types, jobs,
+  stages, exportView, clipSession, ingest, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
