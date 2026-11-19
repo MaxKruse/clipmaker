@@ -206,6 +206,24 @@ export default function Page() {
     }
   };
 
+  // While a range is dragged (in/out handles, move, draw) suspend
+  // playback so the frame under the pointer stays still; the
+  // pre-drag playing state is restored on release.
+  const dragSuspended = useRef(false);
+  const onDragChange = (dragging: boolean) => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (dragging) {
+      if (!v.paused) {
+        dragSuspended.current = true;
+        v.pause();
+      }
+    } else if (dragSuspended.current) {
+      dragSuspended.current = false;
+      void v.play();
+    }
+  };
+
   // Loop the range while playing - only when a range is live.
   const onTime = (t: number) => {
     if (playing && hasRange && draft.end > draft.start && t >= draft.end) {
@@ -486,6 +504,7 @@ export default function Page() {
               onOut={setOut}
               onMoveSel={(a, b) => updateDraft({ start: a, end: b })}
               onDraw={onDraw}
+              onDragChange={onDragChange}
               onClearRange={clearRange}
               glow={session.step === "set-times"}
               focus={session.focus}

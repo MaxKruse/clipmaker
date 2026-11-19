@@ -17,6 +17,10 @@ interface Props {
   onDraw: (a: number, b: number) => void;
   /** Right-click on the range: clear it. */
   onClearRange: () => void;
+  /** A range drag (in/out handle, move, or draw) starts and ends.
+   * The page suspends playback while dragging so the frame under the
+   * pointer stays still. */
+  onDragChange?: (dragging: boolean) => void;
   /** Flow step 1: pulse and hint that the times are set here. */
   glow?: boolean;
   /** Clip range to frame when selected (padded on both sides), for
@@ -40,9 +44,16 @@ const FOCUS_PAD = 5;
  * the view, and a double-click fits the whole video. While dragging a
  * range near the track edge, the view auto-scrolls so the content can
  * be carried across the whole video. */
-export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange, glow, focus }: Props) {
+export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onOut, onMoveSel, onDraw, onClearRange, onDragChange, glow, focus }: Props) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const drag = useRef<{ kind: DragKind; startT: number; startX: number; origIn: number; origOut: number; viewStart: number; viewSpan: number } | null>(null);
+  // A range drag is live (maybe-presses that stay a seek never report).
+  const rangeDragging = useRef(false);
+  const setRangeDragging = (on: boolean) => {
+    if (rangeDragging.current === on) return;
+    rangeDragging.current = on;
+    onDragChange?.(on);
+  };
   const panPos = useRef(0);
   const panRaf = useRef<number | null>(null);
   // Visible time window; the whole video by default.
@@ -151,6 +162,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
   // drag live and the auto-pan loop running: release everything.
   const onCancel = () => {
     stopAutoPan();
+    setRangeDragging(false);
     drag.current = null;
   };
 
@@ -170,6 +182,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
     };
     panPos.current = e.clientX;
     el.setPointerCapture(e.pointerId);
+    if (kind === "in" || kind === "out" || kind === "move") setRangeDragging(true);
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
@@ -182,6 +195,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
       // A single press seeks (handled in onUp); real movement draws.
       if (Math.abs(e.clientX - d.startX) < 4) return;
       d.kind = "draw";
+      setRangeDragging(true);
     }
     if (d.kind === "pan") {
       const r = rootRef.current!.getBoundingClientRect();
@@ -206,6 +220,7 @@ export function Timeline({ duration, time, inPoint, outPoint, onScrub, onIn, onO
     stopAutoPan();
     const d = drag.current;
     if (d?.kind === "maybe") onScrub(d.startT);
+    setRangeDragging(false);
     drag.current = null;
   };
 
