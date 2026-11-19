@@ -25,8 +25,10 @@ export default function Page() {
   const [videos, setVideos] = useState<VideoInfo[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [clips, setClips] = useState<Record<string, ClipSpec[]>>({});
-  // The video whose project file has loaded; gates the clip list so a
-  // switch never shows the previous video's clips.
+  // The video whose project file has loaded; the single load gate: it
+  // keeps the clip list from showing the previous video's clips on a
+  // switch, and it keeps the save effect from writing a record that has
+  // not been loaded yet (the initial empty one).
   const [clipsLoadedFor, setClipsLoadedFor] = useState<string | null>(null);
   const [draft, setDraft] = useState<ClipSpec>(defaultClip);
   // Export options for NEW and imported clips (persisted in .data/defaults.json).
@@ -47,8 +49,6 @@ export default function Page() {
   // What the page-load ingest sweep did (null when it found nothing).
   const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  // The active video's clips are loaded from disk (save guard).
-  const clipsReady = useRef<string | null>(null);
   // Clips waiting to reach disk. The debounced timer is cleared when the
   // save effect re-runs (a video switch), so the payload lives here and
   // gets flushed on switch and on unload instead of being dropped.
@@ -128,7 +128,6 @@ export default function Page() {
       .then((j: { clips: ClipSpec[] }) => {
         if (!alive) return;
         setClips((all) => ({ ...all, [id]: j.clips ?? [] }));
-        clipsReady.current = id;
         setClipsLoadedFor(id);
       })
       .catch(() => {});
@@ -142,14 +141,14 @@ export default function Page() {
     // A video switch clears the timer, so the pending payload would be
     // dropped: when it belongs to the old video, send it now.
     if (pendingSave.current && pendingSave.current.id !== activeId) flushPendingSave();
-    if (!activeId || clipsReady.current !== activeId) return;
+    if (!activeId || clipsLoadedFor !== activeId) return;
     pendingSave.current = {
       id: activeId,
       body: JSON.stringify({ clips: clips[activeId] ?? [] }),
     };
     const h = setTimeout(flushPendingSave, 500);
     return () => clearTimeout(h);
-  }, [clips, activeId]);
+  }, [clips, activeId, clipsLoadedFor]);
 
   // A tab close takes the debounce timer with it, so flush what is still
   // pending; keepalive lets the request outlive the document.
