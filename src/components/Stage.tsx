@@ -81,7 +81,10 @@ export function Stage(props: StageProps) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON") return;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // Arrows on a focused button (e.g. a format pill) still seek the
+      // video; space and the letter keys stay native to the button.
+      if (tag === "BUTTON" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       const v = videoRef.current;
       if (!v) return;
       const frame = 1 / fps;
