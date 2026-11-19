@@ -14,12 +14,25 @@ export function evenFloor(x: number): number {
   return Math.max(2, Math.floor(x / 2) * 2);
 }
 
+/** Which axis of the full-tier frame holds the longest edge. */
+export type LongAxis = "w" | "h";
+
+/**
+ * Cap and scale axis for the sharable ladder: the cap is the user's
+ * maxEdge limited to the full tier's LONGEST edge (never upscaling), and
+ * `axis` is the frame's longest edge - the ladder's `edge` is scaled on
+ * that axis, so a portrait crop's height stays under maxEdge too.
+ */
+export function sharableCap(maxEdge: number, w: number, h: number): { cap: number; axis: LongAxis } {
+  return { cap: Math.min(maxEdge, evenFloor(Math.max(w, h))), axis: w >= h ? "w" : "h" };
+}
+
 /**
  * Sharable ladder, highest quality first: each edge step is tried at the
  * anim fps and then at the reduced fps (5/6 x anim fps); when neither
  * fits, the edge drops one step and the fps goes back up. Edges stay
- * even; maxEdge must already be capped by the crop/source width, so the
- * sharable tier never upscales.
+ * even; maxEdge must already be capped by the crop/source longest edge,
+ * so the sharable tier never upscales.
  */
 export function buildLadder(maxEdge: number, fps: number): Rung[] {
   const low = Math.max(1, Math.round(fps * FPS_STEP));
@@ -52,9 +65,9 @@ export interface AvifRung {
 
 /**
  * AVIF sharable ladder, highest quality first: sweeps the fps/edge
- * ping-pong grid (same as GIF) at the current CRF, degrades the CRF only
+ * fps/edge ping-pong grid (same as GIF) at the current CRF, degrades the CRF only
  * after the whole grid misses the cap, and sweeps again. Edges stay even;
- * maxEdge must already be capped by the crop/source width (no upscale).
+ * maxEdge must already be capped by the crop/source longest edge (no upscale).
  */
 export function buildAvifLadder(maxEdge: number, fps: number): AvifRung[] {
   const rungs: AvifRung[] = [];

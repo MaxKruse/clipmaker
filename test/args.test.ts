@@ -127,6 +127,17 @@ describe("buildGifStage3Args", () => {
       "out.gif",
     ]);
   });
+
+  test("axis h scales the height (portrait crop): the longest edge is the target", () => {
+    expect(
+      buildGifStage3Args({ in: "inter.mp4", pal: "pal.png", out: "out.gif", fps: 25, edge: 512, axis: "h" }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+      "-i", "inter.mp4", "-i", "pal.png",
+      "-lavfi", "fps=25,scale=-2:512:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
+      "out.gif",
+    ]);
+  });
 });
 
 describe("buildPreviewArgs", () => {
@@ -166,6 +177,18 @@ describe("buildAvifArgs", () => {
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4",
       "-vf", "scale=640:-2:flags=lanczos,fps=25",
+      "-c:v", "libsvtav1", "-crf", "29", "-pix_fmt", "yuv420p",
+      "-an", "clip1.avif",
+    ]);
+  });
+
+  test("axis h scales the height (portrait crop): the longest edge is the target", () => {
+    expect(
+      buildAvifArgs({ in: "inter.mp4", out: "clip1.avif", crf: 29, encoder: "libsvtav1", scaleTo: 640, fps: 25, axis: "h" }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-i", "inter.mp4",
+      "-vf", "scale=-2:640:flags=lanczos,fps=25",
       "-c:v", "libsvtav1", "-crf", "29", "-pix_fmt", "yuv420p",
       "-an", "clip1.avif",
     ]);

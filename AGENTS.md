@@ -27,7 +27,7 @@ The code is layered so that everything testable is pure:
 ```
 src/lib/times.ts    time parsing/formatting + frameAt + formatClipTime + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit
-src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf)
+src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf) + sharableCap (maxEdge vs the full tier's longest edge, and the scale axis)
 src/lib/names.ts    safe output file names (clip1-note.mp4, ...)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
@@ -100,8 +100,8 @@ Key invariants:
   MP4; `anim { fps, maxMB, maxEdge }` (fps default 30; 15/20/25/30/60)
   applies to GIF/AVIF - `fps` is the shared intermediate's frame rate
   and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
-  options 256-1440; the ladder is capped at the source/crop width and
-  never upscales). New and imported clips are created by
+  options 256-1440; the ladder is capped at the source/crop longest edge
+  and never upscales). New and imported clips are created by
   `defaultClip(note, defaults)` from the user's persisted
   `ClipDefaults` (shipped values: `formats: ["mp4", "avif"]`,
   `maxEdge: 1000`; the rest in `types.ts:defaultClipDefaults()`).
@@ -156,14 +156,16 @@ Key invariants:
   tier. Each clip with gif and/or avif selected ALWAYS produces two
   versions per format: a **full** tier (full resolution - crop size if
   cropped, else source size - at `anim.fps`, uncapped, at the video root)
-  and a **sharable** tier (scaled to `anim.maxEdge`, capped at
-  `anim.maxMB`, in `sharable/`; sharable gif files carry the `-<maxEdge>`
-  edge suffix).
+  and a **sharable** tier (its longest edge scaled to `anim.maxEdge` -
+  `sharableCap` picks the axis, so a portrait crop scales the height -
+  capped at `anim.maxMB`, in `sharable/`; sharable gif files carry the
+  `-<maxEdge>` edge suffix).
   - **GIF**: shared `palettegen` from the full-res cut (256 colors,
     `stats_mode=full`); full tier = one stage-3 encode at full
     size@anim.fps, no cap; sharable tier = the ping-pong quality ladder:
     each edge step (maxEdge x 1.0, .75, .625, .5, .375, .25, even-floored,
-    capped at the full tier's edge so it never upscales) is tried at
+    capped at the full tier's longest edge via sharableCap and scaled on
+    that axis so it never upscales) is tried at
     anim.fps and then at 5/6 x anim.fps (the recipe's 30 -> 25), highest
     quality first, taking the first rung whose file is <= maxMB; an
     emergency 0.1875-edge rung at the stepped fps is tried last; if it
@@ -428,8 +430,9 @@ Key invariants:
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
   requested range, expected fps, audio stream when expected, full-tier
-  gif/avif at source resolution uncapped, sharable tier at maxEdge
-  within the size cap, avif codec `av1`) and confirm
+  gif/avif at source resolution uncapped, sharable tier's longest edge at
+  maxEdge (or the crop's longest edge when smaller) within the size cap,
+  avif codec `av1`) and confirm
   `GET /api/videos/<id>/file` answers 206 for a Range request.
 - Ingest: drop a file into `ingest/` and refresh - it is moved into
   `uploads/<videoId>/`, registered (banner + auto-selected); a file

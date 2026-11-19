@@ -4,7 +4,30 @@ import {
   buildAvifLadder,
   buildLadder,
   emergencyRung,
+  sharableCap,
 } from "../src/lib/ladder";
+
+describe("sharableCap", () => {
+  test("landscape frame: cap is min(maxEdge, width), axis w", () => {
+    expect(sharableCap(1000, 1920, 1080)).toEqual({ cap: 1000, axis: "w" });
+  });
+
+  test("narrower crop than maxEdge: keeps the crop's longest edge (no upscale)", () => {
+    expect(sharableCap(1440, 1008, 568)).toEqual({ cap: 1008, axis: "w" });
+  });
+
+  test("portrait crop: cap targets the HEIGHT, so h stays under maxEdge", () => {
+    expect(sharableCap(1000, 1000, 1008)).toEqual({ cap: 1000, axis: "h" });
+  });
+
+  test("portrait crop shorter than maxEdge: keeps what it has, axis h", () => {
+    expect(sharableCap(1000, 700, 900)).toEqual({ cap: 900, axis: "h" });
+  });
+
+  test("square frame: axis w", () => {
+    expect(sharableCap(1000, 900, 900)).toEqual({ cap: 900, axis: "w" });
+  });
+});
 
 describe("buildLadder", () => {
   test("ping-pong: fps first (anim -> 5/6), then edge one step down at anim fps", () => {

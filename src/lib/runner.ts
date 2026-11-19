@@ -26,7 +26,9 @@ import {
   buildLadder,
   emergencyRung,
   evenFloor,
+  sharableCap,
   type AvifRung,
+  type LongAxis,
   type Rung,
 } from "./ladder";
 import { clipFileName } from "./names";
@@ -282,9 +284,11 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
     dur,
   );
 
-  // The ladder never upscales: capped at the full tier's edge, so a crop
-  // (or source) narrower than maxEdge just keeps the best it has.
-  const winner = await gifSharableRung(job, inter, pal, Math.min(maxEdge, fullEdge), maxMB, fps, tmp, dur);
+  // The ladder never upscales: capped at the full tier's LONGEST edge,
+  // and scaled on that axis, so a portrait crop's height stays under
+  // maxEdge too; a crop (or source) smaller than maxEdge keeps what it has.
+  const { cap, axis } = sharableCap(maxEdge, clip.crop ? clip.crop.w : video.width, clip.crop ? clip.crop.h : video.height);
+  const winner = await gifSharableRung(job, inter, pal, cap, maxMB, fps, tmp, dur, axis);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "gif");
@@ -306,7 +310,7 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
 
 /** Sharable-tier GIF: the quality ladder top-down, first rung under the cap. */
 async function gifSharableRung(
-  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, fps: number, tmp: string, dur: number,
+  job: Job, inter: string, pal: string, maxEdge: number, maxMB: number, fps: number, tmp: string, dur: number, axis: LongAxis,
 ): Promise<{ file: string; rung: Rung }> {
   const ladder = buildLadder(maxEdge, fps);
   const maxBytes = maxMB * 1024 * 1024;
@@ -315,7 +319,7 @@ async function gifSharableRung(
     const rung = ladder[i];
     const f = path.join(tmp, `gif-${rung.edge}-${rung.fps}.gif`);
     job.stage = { id: "gif-rung", edge: rung.edge, fps: rung.fps, index: i + 1, total: ladder.length };
-    await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: rung.fps, edge: rung.edge }), dur);
+    await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: rung.fps, edge: rung.edge, axis }), dur);
     if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
     fs.rmSync(f, { force: true });
   }
@@ -323,7 +327,7 @@ async function gifSharableRung(
   const f = path.join(tmp, "gif-emergency.gif");
   job.stage = { id: "gif-emergency", edge: e.edge, fps: e.fps };
   throwIfCancelled(job);
-  await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge }), dur);
+  await runTracked(job, findBin("ffmpeg"), buildGifStage3Args({ in: inter, pal, out: f, fps: e.fps, edge: e.edge, axis }), dur);
   if (fs.statSync(f).size > maxBytes) {
     fs.rmSync(f, { force: true });
     throw new Error(`gif exceeds the ${maxMB}MB cap even at ${e.edge}px/${e.fps}fps - shorten the clip or raise the cap`);
@@ -361,10 +365,11 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
     dur,
   );
 
-  // The ladder never upscales: capped at the full tier's edge, so a crop
-  // (or source) narrower than maxEdge just keeps the best it has.
-  const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
-  const winner = await avifSharableRung(job, inter, Math.min(maxEdge, fullEdge), maxMB, fps, encoder, dur, tmp);
+  // The ladder never upscales: capped at the full tier's LONGEST edge,
+  // and scaled on that axis, so a portrait crop's height stays under
+  // maxEdge too; a crop (or source) smaller than maxEdge keeps what it has.
+  const { cap, axis } = sharableCap(maxEdge, clip.crop ? clip.crop.w : video.width, clip.crop ? clip.crop.h : video.height);
+  const winner = await avifSharableRung(job, inter, cap, maxMB, fps, encoder, dur, tmp, axis);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
   const fullName = clipFileName(job.clipNo, clip.note, "avif");
@@ -386,7 +391,7 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
 /** Sharable-tier AVIF: the 3-axis ladder (fps, edge, crf) top-down, first rung under the cap. */
 async function avifSharableRung(
   job: Job, inter: string, maxEdge: number, maxMB: number, fps: number,
-  encoder: AvifEncoder, dur: number, tmp: string,
+  encoder: AvifEncoder, dur: number, tmp: string, axis: LongAxis,
 ): Promise<{ file: string; rung: AvifRung }> {
   const maxBytes = maxMB * 1024 * 1024;
   const ladder = buildAvifLadder(maxEdge, fps);
@@ -398,7 +403,7 @@ async function avifSharableRung(
     await runTracked(
       job,
       findBin("ffmpeg"),
-      buildAvifArgs({ in: inter, out: f, crf: rung.crf, encoder, scaleTo: rung.edge, fps: rung.fps }),
+      buildAvifArgs({ in: inter, out: f, crf: rung.crf, encoder, scaleTo: rung.edge, fps: rung.fps, axis }),
       dur,
     );
     if (fs.statSync(f).size <= maxBytes) return { file: f, rung };
@@ -411,7 +416,7 @@ async function avifSharableRung(
   await runTracked(
     job,
     findBin("ffmpeg"),
-    buildAvifArgs({ in: inter, out: f, crf: e.crf, encoder, scaleTo: e.edge, fps: e.fps }),
+    buildAvifArgs({ in: inter, out: f, crf: e.crf, encoder, scaleTo: e.edge, fps: e.fps, axis }),
     dur,
   );
   if (fs.statSync(f).size > maxBytes) {

@@ -94,19 +94,25 @@ export function buildGifPaletteArgs(s: { in: string; out: string }): string[] {
   ];
 }
 
-/** GIF stage 3: final pass from temp mp4 + palette for one ladder rung. */
+/**
+ * GIF stage 3: final pass from temp mp4 + palette for one ladder rung.
+ * `edge` is the target for the frame's longest edge (`axis`); the full
+ * tier passes the frame width with the default axis "w" (a no-op scale).
+ */
 export function buildGifStage3Args(s: {
   in: string;
   pal: string;
   out: string;
   fps: number;
   edge: number;
+  axis?: "w" | "h";
 }): string[] {
+  const scale = s.axis === "h" ? `scale=-2:${s.edge}:flags=lanczos` : `scale=${s.edge}:-2:flags=lanczos`;
   return [
     "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
     "-i", s.in, "-i", s.pal,
     "-lavfi",
-    `fps=${s.fps},scale=${s.edge}:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,
+    `fps=${s.fps},${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,
     s.out,
   ];
 }
@@ -115,9 +121,9 @@ export type AvifEncoder = "libsvtav1" | "libaom-av1";
 
 /**
  * AVIF: animated AV1 into the avif (ISOBMFF) muxer, from the full-res
- * temp intermediate. Sharable rungs pass `scaleTo` (rung edge) and
- * `fps` (rung fps); the full tier encodes as-is. The crf is the size
- * control.
+ * temp intermediate. Sharable rungs pass `scaleTo` (the rung edge,
+ * targeted at the frame's longest edge per `axis`) and `fps` (rung fps);
+ * the full tier encodes as-is. The crf is the size control.
  */
 export function buildAvifArgs(s: {
   in: string;
@@ -126,9 +132,14 @@ export function buildAvifArgs(s: {
   encoder: AvifEncoder;
   scaleTo?: number;
   fps?: number;
+  axis?: "w" | "h";
 }): string[] {
   const vf = [
-    s.scaleTo ? `scale=${s.scaleTo}:-2:flags=lanczos` : null,
+    s.scaleTo
+      ? s.axis === "h"
+        ? `scale=-2:${s.scaleTo}:flags=lanczos`
+        : `scale=${s.scaleTo}:-2:flags=lanczos`
+      : null,
     s.fps ? `fps=${s.fps}` : null,
   ]
     .filter(Boolean)
