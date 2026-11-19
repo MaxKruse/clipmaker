@@ -6,7 +6,7 @@ test("defaultClip: MP4 defaults to 60 fps", () => {
 });
 
 test("defaultClip: GIF/AVIF anim fps defaults to 30", () => {
-  expect(defaultClip().anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1024 });
+  expect(defaultClip().anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1000 });
 });
 
 test("defaultClip: new clips default to mp4 + avif (gif is opt-in)", () => {

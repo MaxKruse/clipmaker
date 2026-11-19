@@ -87,7 +87,7 @@ test("clamps enums to defaults", () => {
   expect(c.formats).toEqual(["mp4", "gif", "avif"]);
   expect(c.fps).toBe(60);
   expect(c.quality).toEqual({ mode: "source", kbit: 250 });
-  expect(c.anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1024 });
+  expect(c.anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1000 });
 });
 
 test("drops missing crop", () => {

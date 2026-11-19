@@ -8,7 +8,7 @@ export const FORMAT_OPTIONS: Format[] = ["mp4", "gif", "avif"];
 export const MP4_FPS_OPTIONS = [25, 30, 60];
 export const ANIM_FPS_OPTIONS = [15, 20, 25, 30, 60];
 export const ANIM_MAX_MB_OPTIONS = [10, 25, 48];
-export const ANIM_MAX_EDGE_OPTIONS = [256, 512, 768, 1024, 1280, 1440];
+export const ANIM_MAX_EDGE_OPTIONS = [256, 512, 768, 1000, 1280, 1440];
 
 export interface VideoInfo {
   id: string;
@@ -96,6 +96,6 @@ export function defaultClip(note = ""): ClipSpec {
     audio: true,
     fps: 60,
     quality: { mode: "source", kbit: 0 },
-    anim: { fps: 30, maxMB: 48, maxEdge: 1024 },
+    anim: { fps: 30, maxMB: 48, maxEdge: 1000 },
   };
 }

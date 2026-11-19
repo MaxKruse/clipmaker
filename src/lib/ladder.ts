@@ -3,12 +3,12 @@ export interface Rung {
   fps: number;
 }
 
-// Quality ladder (skill recipe, 1024px baseline): ping-pong the two
+// Quality ladder (skill recipe, 1000px baseline): ping-pong the two
 // quality axes - first the fps (anim fps -> 5/6 x anim fps, the recipe's
 // 30 -> 25), then one edge step down at the anim fps again, and so on.
 const FPS_STEP = 5 / 6;
-const EDGE_RATIOS = [1, 0.75, 0.625, 0.5, 0.375, 0.25]; // 1024, 768, 640, 512, 384, 256
-const EMERGENCY_RATIO = 0.1875; // 192px at the 1024 baseline
+const EDGE_RATIOS = [1, 0.75, 0.625, 0.5, 0.375, 0.25]; // 1000, 750, 625, 500, 375, 250
+const EMERGENCY_RATIO = 0.1875; // 186px at the 1000 baseline
 
 export function evenFloor(x: number): number {
   return Math.max(2, Math.floor(x / 2) * 2);
