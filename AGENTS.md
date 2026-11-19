@@ -41,12 +41,15 @@ src/lib/jobs.ts     export list display order (newest batch first, clip order wi
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
-src/lib/avif.ts       avifDurationLevel - length-based AVIF encode warning (45s/60s)
-src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, ProbeResult +
-                    defaultClip(note, defaults) / defaultClipDefaults()
+src/lib/avif.ts       avifDurationLevel (length-based AVIF encode warning, 45s/60s) +
+                    avifWarningText (the shared user-facing warning sentence)
+src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, MIN_CLIP_SECONDS +
+                    defaultClip(note, defaults) / defaultClipDefaults() /
+                    toggleFormatIn (formats list, keeps at least one)
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
-src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers, progress,
+src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers,
+                    probeVideo/ProbeResult (video metadata at load), progress,
                     encoder probes (nvenc, avif; one-shot via once()), and
                     the cancel registry (runTracked tracks each running
                     child, killProcessTree kills it) that lets the runner
@@ -322,12 +325,14 @@ Key invariants:
   range (back to free playback). Playing, setting in/out, scrubbing,
   and switching/removing the video clear the pending return.
 - Times in the clip list and the timeline in/out chip are shown with
-  milliseconds (`formatTime`); only the zoom-window label uses
-  `formatShort`.
+  milliseconds (`formatTime`); the zoom-window label and the preview
+  back button use `formatShort`.
 - Jobs are polled every 1s; the video list is loaded once. Clips are
   per-video project files: loaded for the active video, saved with a
-  500ms debounce, gated on the `clipsReady` ref (the active video's
-  load finished) so the initial empty record never clobbers disk.
+  500ms debounce. `clipsLoadedFor` (page.tsx state) is the single
+  load gate: it keeps the clip list from showing the previous video's
+  clips on a switch and keeps the save effect from writing a record
+  that has not been loaded yet (the initial empty one).
 - Layout: the page scrolls at every size (root `min-h-screen`, no
   fixed viewport height). The Stage video box is always 16:9
   (`aspect-video w-full`); the Stage's height is content-driven (video
@@ -348,14 +353,21 @@ Key invariants:
   reload mid-export). While the modal is open it is the topmost
   layer: the header button (reads `minimize` while any job is active,
   `close` once settled), `Esc`, and a backdrop click all dismiss it
-  (to the pill, "✓ N done · M running show", whose `show` reopens it).
+  (to the pill - "N exporting" / "N failed" / "N done" plus "show" -
+  whose `show` reopens it).
   The modal captures both so they do not leak to the clip preview
   underneath (capture-phase keydown with `stopPropagation`; the
   backdrop click also stops the page's inert-background click):
-  while the modal is open, Esc does not leave the preview. Header
+  while the modal is open, Esc does not leave the preview. The panel
+  is a real dialog (`role=dialog`, `aria-modal`): focus moves to the
+  close button on open and returns to its previous holder on close.
+  The batch tri-state dot (spinner / ok / failed) in the header and in
+  the pill is the shared `JobStateDot` (ExportModal.tsx). Header
   shows the overall percentage (mean over jobs); each row shows a
   status chip, the stage text, a per-job bar, and the finished outputs
-  with a `sharable` chip; a `cancel` button (queued/running rows only)
+  as download buttons (file name + size; the sharable tier is
+  recognizable by its `-<edge>` name suffix); a `cancel` button
+  (queued/running rows only)
   calls `DELETE /api/jobs/[id]` and the row then settles as
   `error: "cancelled by user"`. Footer: `clear finished` (shown only when
   settled with at least one done; clears done/error jobs and dismisses
@@ -423,7 +435,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 163 unit tests over the pure libs (times, bitrate,
+- `bun test` - 175 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, crop, args, clipsTxt, clips, types, jobs,
   stages, exportView, clipSession, ingest, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
