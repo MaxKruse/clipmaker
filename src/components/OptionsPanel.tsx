@@ -31,7 +31,7 @@ function TimeInput({ value, onCommit }: { value: number; onCommit: (t: number) =
     <input
       className="input w-full font-mono"
       value={txt}
-      placeholder="0:00.00"
+      placeholder="seconds"
       onFocus={() => (focused.current = true)}
       onChange={(e) => setTxt(e.target.value)}
       onBlur={() => {
