@@ -120,19 +120,16 @@ export function Stage(props: StageProps) {
   };
 
   return (
-    <div data-player className={`panel relative flex h-full min-h-0 flex-col p-2 ${glow ? "attn" : ""}`}>
-      {/* The video box is width-capped: at wide viewports the left
-       * column would otherwise make the player taller than the screen.
-       * With a fixed panel height (fit) the box fills the leftover
-       * height instead of keeping its 16:9 width-driven size. */}
-      <div className={`mx-auto flex w-full max-w-3xl flex-col ${fit ? "h-full min-h-0" : ""}`}>
+    <div data-player className={`panel relative flex h-full min-h-0 flex-col ${glow ? "attn" : ""}`}>
+      {/* The video box fills the stage area with a small margin on
+       * every side (inset of the area). At natural height the area is
+       * 16:9, so the box is 16:9 too; with a user-set panel height
+       * (fit) the area flexes and the video letterboxes inside the
+       * box. */}
+      <div className={fit ? "relative min-h-0 flex-1" : "relative aspect-video w-full"}>
       <div
         ref={boxRef}
-        className={
-          fit
-            ? "relative w-full min-h-0 flex-1 overflow-hidden rounded-md bg-black"
-            : "relative aspect-video w-full overflow-hidden rounded-md bg-black"
-        }
+        className="absolute inset-[3.333%] overflow-hidden rounded-md bg-black"
       >
         {glow && (
           <span className="chip pointer-events-none absolute left-2 top-2 z-10">
@@ -160,6 +157,10 @@ export function Stage(props: StageProps) {
           />
         )}
       </div>
+      </div>
+      {/* Controls sit in the bottom margin band under the box, with the
+       * same horizontal margin. */}
+      <div className="shrink-0 px-[3.333%] pb-2">
       <div
         ref={barRef}
         title="click or drag to scrub"

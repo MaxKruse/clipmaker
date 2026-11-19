@@ -256,13 +256,13 @@ Key invariants:
 - Styling: Tailwind v4 with design tokens in `globals.css`
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
-- **Player size**: the Stage centers its content (video box + scrub
-  bar + transport row) in a `max-w-3xl` (768px) wrapper, so the player
-  never grows with the panel on wide screens. With the `fit` prop (set
-  when the user has resized the stage seam), the wrapper fills the
-  row and the video box flexes to whatever height is left instead of
-  keeping its 16:9 ratio; the crop overlay tracks any box size via the
-  ResizeObserver.
+- **Player size**: there is no width cap. The Stage is a flex column:
+  a video *area* (16:9 at natural height; `flex-1` in fit mode, see
+  the resizable work area) that holds the video box absolutely
+  inset `3.333%` of the area on every side, then the scrub bar +
+  transport row in a bottom band with the same horizontal margin.
+  The video element is `object-contain` in the box; the crop overlay
+  tracks any box size via the ResizeObserver.
 - **Keyboard**: the Stage keydown listener ignores INPUT/TEXTAREA/
   SELECT so typing in the In/Out/note inputs stays native; a focused
   BUTTON passes only ArrowLeft/ArrowRight through to the seek handler
