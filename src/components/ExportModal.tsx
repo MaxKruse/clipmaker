@@ -6,12 +6,34 @@ import { isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
 import type { Job } from "@/lib/types";
 
-export function Spinner({ className = "size-4" }: { className?: string }) {
+function Spinner({ className = "size-4" }: { className?: string }) {
   return (
     <svg className={`${className} animate-spin text-accent`} viewBox="0 0 24 24" fill="none" aria-hidden>
       <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
       <path className="opacity-90" fill="currentColor" d="M12 2a10 10 0 0 1 10 10h-3a7 7 0 0 0-7-7V2z" />
     </svg>
+  );
+}
+
+/** Batch tri-state indicator shared by the modal header and the pill:
+ * a spinner while any job is moving, a check when all are done, a bang
+ * when anything failed. */
+export function JobStateDot({
+  state,
+  className = "size-4",
+}: {
+  state: "active" | "done" | "failed";
+  className?: string;
+}) {
+  if (state === "active") return <Spinner className={className} />;
+  return (
+    <span
+      className={`flex ${className} items-center justify-center rounded-full font-mono text-[10px] font-bold ${
+        state === "failed" ? "bg-danger/20 text-danger" : "bg-ok/20 text-ok"
+      }`}
+    >
+      {state === "failed" ? "!" : "✓"}
+    </span>
   );
 }
 
@@ -144,11 +166,7 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
     >
       <div className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl">
         <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
-          {!allSettled ? <Spinner className="size-5" /> : (
-            <span className={`flex size-5 items-center justify-center rounded-full text-xs font-bold ${failed.length ? "bg-danger/20 text-danger" : "bg-ok/20 text-ok"}`}>
-              {failed.length ? "!" : "✓"}
-            </span>
-          )}
+          <JobStateDot state={allSettled ? (failed.length ? "failed" : "done") : "active"} className="size-5" />
           <div className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">
               {allSettled ? (failed.length ? "Export finished with errors" : "Export finished") : "Exporting clips"}

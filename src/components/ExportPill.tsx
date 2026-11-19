@@ -2,7 +2,7 @@
 
 import { jobCounts } from "@/lib/jobs";
 import type { Job } from "@/lib/types";
-import { Spinner } from "./ExportModal";
+import { JobStateDot } from "./ExportModal";
 
 /**
  * Minimized export state: a small fixed pill (bottom-right, out of the
@@ -18,13 +18,7 @@ export function ExportPill({ jobs, onView }: { jobs: Job[]; onView: () => void }
       onClick={onView}
       className="panel fixed right-3 bottom-3 z-40 flex items-center gap-2 border-accent/40 bg-panel px-3 py-2 shadow-xl transition-colors hover:border-accent"
     >
-      {active > 0 ? (
-        <Spinner />
-      ) : failed > 0 ? (
-        <span className="flex size-4 items-center justify-center rounded-full bg-danger/20 font-mono text-[10px] font-bold text-danger">!</span>
-      ) : (
-        <span className="flex size-4 items-center justify-center rounded-full bg-ok/20 font-mono text-[10px] font-bold text-ok">✓</span>
-      )}
+      <JobStateDot state={active > 0 ? "active" : failed > 0 ? "failed" : "done"} />
       <span className="font-mono text-xs">{label}</span>
       <span className="text-xs text-muted">show</span>
     </button>
