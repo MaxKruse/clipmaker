@@ -91,7 +91,8 @@ export function defaultClip(note = ""): ClipSpec {
     start: 0,
     end: 5,
     crop: null,
-    formats: ["mp4", "gif"],
+    // mp4 + avif are the defaults; gif is the opt-in fallback.
+    formats: ["mp4", "avif"],
     audio: true,
     fps: 60,
     quality: { mode: "source", kbit: 0 },
