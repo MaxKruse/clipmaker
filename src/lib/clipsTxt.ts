@@ -69,16 +69,32 @@ export function parseClipsTxt(
  * never break the line grammar. The round trip
  * parseClipsTxt(clipsTxtForVideo(...)) is pinned by the tests.
  */
-export function clipsTxtForVideo(
-  videoName: string,
-  clips: { start: number; end: number; note: string }[],
-): string {
-  const lines = [`# ${videoName}`];
+type ClipLine = { start: number; end: number; note: string };
+
+/** One `<start> - <end> <note?>` line per clip, sub-second precision kept.
+ * Notes are flattened to one line so a stored note can never break the
+ * line grammar. */
+function clipLines(clips: ClipLine[]): string[] {
+  const lines: string[] = [];
   for (const c of clips) {
     const note = c.note.replace(/[\r\n]+/g, " ").trim();
     lines.push(note ? `${formatClipTime(c.start)} - ${formatClipTime(c.end)} ${note}` : `${formatClipTime(c.start)} - ${formatClipTime(c.end)}`);
   }
-  return lines.join("\n") + "\n";
+  return lines;
+}
+
+export function clipsTxtForVideo(videoName: string, clips: ClipLine[]): string {
+  return [`# ${videoName}`, ...clipLines(clips)].join("\n") + "\n";
+}
+
+/**
+ * The clips.txt lines without the `# <video name>` header: the contents of
+ * out/<videoId>/timestamps.txt (one `<start> - <end> <note?>` line per
+ * clip). parseClipsTxt still reads every line it writes.
+ */
+export function timestampsForVideo(clips: ClipLine[]): string {
+  const lines = clipLines(clips);
+  return lines.length ? lines.join("\n") + "\n" : "";
 }
 
 /**

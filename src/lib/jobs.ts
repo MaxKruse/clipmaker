@@ -32,6 +32,30 @@ export function sortJobs(jobs: Job[]): Job[] {
   return [...jobs].sort((a, b) => b.createdAt - a.createdAt || a.clipNo - b.clipNo);
 }
 
+/**
+ * Export batches in display order: one export request stamps every job it
+ * enqueues with the same createdAt, so in a sortJobs-ordered list the
+ * consecutive runs sharing a createdAt are the batches. Re-exporting the
+ * same clips produces a second batch, which is what lets the export view
+ * tell two "#1 Nuzzle" rows apart.
+ */
+export function groupBatches(jobs: Job[]): Job[][] {
+  const groups: Job[][] = [];
+  for (const j of jobs) {
+    const last = groups[groups.length - 1];
+    if (last && last[0].createdAt === j.createdAt) last.push(j);
+    else groups.push([j]);
+  }
+  return groups;
+}
+
+/** Batch header: the local wall-clock time the batch was exported. */
+export function batchTimeLabel(createdAt: number): string {
+  const d = new Date(createdAt);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
 /** A job still occupying the export pool: queued or running. */
 export function isActiveJob(j: Job): boolean {
   return j.status === "queued" || j.status === "running";

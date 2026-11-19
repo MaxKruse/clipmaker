@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { toClip, toDefaults } from "../src/lib/clips";
+import { initialPlayhead, toClip, toDefaults } from "../src/lib/clips";
 import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OPTIONS, MP4_FPS_OPTIONS, defaultClip } from "../src/lib/types";
 
 const v = { duration: 100, width: 1920, height: 1080 };
@@ -147,4 +147,20 @@ test("toDefaults: invalid enums fall back per field", () => {
   const d = toDefaults({ fps: 99, anim: { fps: 99, maxMB: 99, maxEdge: 99 } });
   expect(d.fps).toBe(60);
   expect(d.anim).toEqual({ fps: 30, maxMB: 48, maxEdge: 1000 });
+});
+
+test("initialPlayhead opens at the first clip in the list", () => {
+  expect(initialPlayhead([{ start: 887 }, { start: 100 }], 3735)).toBe(887);
+});
+
+test("initialPlayhead opens at 0 with no clips", () => {
+  expect(initialPlayhead([], 3735)).toBe(0);
+});
+
+test("initialPlayhead clamps a clip start past the duration", () => {
+  expect(initialPlayhead([{ start: 9999 }], 100)).toBe(100);
+});
+
+test("initialPlayhead never goes below 0", () => {
+  expect(initialPlayhead([{ start: -5 }], 100)).toBe(0);
 });

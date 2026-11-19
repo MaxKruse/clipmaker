@@ -66,3 +66,14 @@ export function toDefaults(raw: unknown): ClipDefaults {
     },
   };
 }
+
+/**
+ * Where to land the playhead when a video becomes active: the first clip's
+ * start (the top of the queue), so a VOD with clips does not open on the
+ * boring 0:00 frame. 0:00 when the video has no clips yet. Clamped to the
+ * video duration.
+ */
+export function initialPlayhead(clips: Pick<ClipSpec, "start">[], duration: number): number {
+  if (clips.length === 0) return 0;
+  return Math.min(Math.max(0, clips[0].start), duration);
+}

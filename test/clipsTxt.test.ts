@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clipsTxtForVideo, parseClipsTxt, sectionForVideo } from "../src/lib/clipsTxt";
+import { clipsTxtForVideo, parseClipsTxt, sectionForVideo, timestampsForVideo } from "../src/lib/clipsTxt";
 
 describe("parseClipsTxt", () => {
   test("parses m:ss ranges with notes", () => {
@@ -122,5 +122,27 @@ describe("sectionForVideo", () => {
   test("ignores sections without clips", () => {
     const withEmpty = [sections[0], { title: "twitch_sleepylulu_2026-10-21 07-01-58_1080p_VRChat_(stream one) take2", clips: [] }];
     expect(sectionForVideo(withEmpty, "twitch_sleepylulu_2026-10-21 07-01-58_1080p_VRChat.mp4")).toBe(sections[0]);
+  });
+});
+
+describe("timestampsForVideo", () => {
+  test("writes one line per clip without the # header", () => {
+    expect(timestampsForVideo([{ start: 887, end: 922.5, note: "Funny" }])).toBe("14:47 - 15:22.5 Funny\n");
+  });
+
+  test("keeps sub-second precision and handles empty notes", () => {
+    const out = timestampsForVideo([
+      { start: 887, end: 922.5, note: "Funny" },
+      { start: 6101, end: 6174, note: "" },
+    ]);
+    expect(out).toBe("14:47 - 15:22.5 Funny\n1:41:41 - 1:42:54\n");
+  });
+
+  test("empty clip list yields empty output", () => {
+    expect(timestampsForVideo([])).toBe("");
+  });
+
+  test("flattens newlines in notes to spaces", () => {
+    expect(timestampsForVideo([{ start: 10, end: 20, note: "a\nb" }])).toBe("0:10 - 0:20 a b\n");
   });
 });

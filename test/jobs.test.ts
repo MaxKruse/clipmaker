@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findOutput, isActiveJob, jobCounts, resolveTier, sortJobs } from "../src/lib/jobs";
+import { batchTimeLabel, findOutput, groupBatches, isActiveJob, jobCounts, resolveTier, sortJobs } from "../src/lib/jobs";
 import { defaultClip, type Job, type JobOutput } from "../src/lib/types";
 
 const job = (id: string, clipNo: number, createdAt: number): Job => ({
@@ -111,5 +111,33 @@ describe("jobCounts", () => {
     expect(isActiveJob(withStatus("r", "running"))).toBe(true);
     expect(isActiveJob(withStatus("d", "done"))).toBe(false);
     expect(isActiveJob(withStatus("e", "error"))).toBe(false);
+  });
+});
+
+describe("groupBatches", () => {
+  test("splits display-ordered jobs into export batches by createdAt", () => {
+    const b = 2000, a = 1000;
+    const jobs = sortJobs([job("3", 1, a), job("1", 2, b), job("2", 1, b)]);
+    const groups = groupBatches(jobs);
+    expect(groups.length).toBe(2);
+    expect(groups[0].map((j) => j.id)).toEqual(["2", "1"]);
+    expect(groups[1].map((j) => j.id)).toEqual(["3"]);
+  });
+
+  test("a single run yields one batch in clip order", () => {
+    const jobs = sortJobs([job("2", 2, 5), job("1", 1, 5)]);
+    const groups = groupBatches(jobs);
+    expect(groups.length).toBe(1);
+    expect(groups[0].map((j) => j.id)).toEqual(["1", "2"]);
+  });
+
+  test("empty list yields no batches", () => {
+    expect(groupBatches([])).toEqual([]);
+  });
+});
+
+describe("batchTimeLabel", () => {
+  test("formats createdAt as zero-padded HH:MM:SS", () => {
+    expect(batchTimeLabel(1731000000000)).toMatch(/^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/);
   });
 });
