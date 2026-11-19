@@ -128,6 +128,12 @@ points on the track. Click on empty space, press `Esc`, or use the
 back button in the transport row to return to where you were and
 deselect the clip.
 
+**Resizing the layout** - on wide screens, drag the thin grip between
+two panels (player / timeline / filmstrip, left / right column,
+options / clip list) to make them bigger or smaller; double-click a
+grip to put that panel back to its natural size. Your arrangement is
+remembered across reloads.
+
 Keyboard: `space` play/pause, `I`/`O` in/out, `left`/`right` seek,
 `shift` + `left`/`right` = one frame, `esc` back from a clip preview (deselects it).
 The arrow keys still seek the video even when a button (e.g. a format

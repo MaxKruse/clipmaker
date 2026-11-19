@@ -41,6 +41,7 @@ src/lib/jobs.ts     export list display order (newest batch first, clip order wi
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
+src/lib/layout.ts     resizable work-area layout (WorkLayout, LAYOUT_LIMITS, clamp, load/save with injected IO)
 src/lib/avif.ts       avifDurationLevel (length-based AVIF encode warning, 45s/60s) +
                     avifWarningText (the shared user-facing warning sentence)
 src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, MIN_CLIP_SECONDS +
@@ -257,7 +258,11 @@ Key invariants:
   UI must reuse those tokens/classes, not redeclare colors.
 - **Player size**: the Stage centers its content (video box + scrub
   bar + transport row) in a `max-w-3xl` (768px) wrapper, so the player
-  never grows with the panel on wide screens.
+  never grows with the panel on wide screens. With the `fit` prop (set
+  when the user has resized the stage seam), the wrapper fills the
+  row and the video box flexes to whatever height is left instead of
+  keeping its 16:9 ratio; the crop overlay tracks any box size via the
+  ResizeObserver.
 - **Keyboard**: the Stage keydown listener ignores INPUT/TEXTAREA/
   SELECT so typing in the In/Out/note inputs stays native; a focused
   BUTTON passes only ArrowLeft/ArrowRight through to the seek handler
@@ -268,8 +273,9 @@ Key invariants:
   was playing) and restores the playing state on release, so the frame
   under the pointer is the exact frame the clip will start on.
 - **Clip list scroll cap**: the queue list is capped at 420px (~12
-  rows) and scrolls internally at every breakpoint
-  (`max-h-[420px]`); rows are compact (`py-1`).
+  rows) and scrolls internally below `xl` (`max-h-[420px]
+  xl:max-h-none`); at `xl` the grid row already bounds it; rows are
+  compact (`py-1`).
 - The stage measures its frame with a ResizeObserver. The crop overlay
   covers the whole stage and is always active: every pointer event on
   the video crops (click = plant, drag = draw, move, 8 resize handles);
@@ -319,9 +325,9 @@ Key invariants:
   only resets via double-click/fit or a video switch. Returning is by
   clicking inert background (a document-level click listener ignores
   `closest("[data-clips-panel], [data-clip-options], [data-player],
-  textarea)"), pressing `Esc` (only while the export modal is closed -
-  the modal captures Esc first), or the back button in the Stage
-  transport row. Leaving the preview also deselects the clip and clears its
+  [data-layout], button, input, a, select, textarea")`), pressing
+  `Esc` (only while the export modal is closed - the modal captures
+  Esc first), or the back button in the Stage transport row. Leaving the preview also deselects the clip and clears its
   range (back to free playback). Playing, setting in/out, scrubbing,
   and switching/removing the video clear the pending return.
 - Times in the clip list and the timeline in/out chip are shown with
@@ -334,19 +340,44 @@ Key invariants:
   clips on a switch and keeps the save effect from writing a record
   that has not been loaded yet (the initial empty one).
 - Layout: the page scrolls at every size (root `min-h-screen`, no
-  fixed viewport height). The Stage video box is always 16:9
-  (`aspect-video w-full`); the Stage's height is content-driven (video
-  box + scrub bar + transport row). At `xl` and up the work area is a
-  two-column grid (`1fr` + `400px`): the left column stacks Stage,
-  Timeline, CropPreview; the right column stacks OptionsPanel (natural
-  height) over ClipQueue, and the grid stretches the right column to
-  the left column's height so ClipQueue (`xl:flex-1`) fills it and the
-  clip list scrolls inside (the list itself is capped at 420px at
-  every size - see the clip list scroll cap bullet above). Below `xl`
-  everything is one column. Export progress is not in
-  the layout flow at all: a front-and-center modal (ExportModal) with
-  a bottom-right pill (ExportPill) as its minimized form; both hide
-  themselves when no job exists.
+  fixed viewport height). At `xl` and up the work area is a
+  **resizable grid** (see the next bullet): left column stacks Stage,
+  Timeline, Filmstrip; right column stacks OptionsPanel over ClipQueue,
+  and the grid stretches the right column to the left column's height
+  so ClipQueue fills it and the clip list scrolls inside (the list
+  itself is capped at 420px below `xl` - see the clip list scroll cap
+  bullet above). Below `xl` everything is one column. Export progress
+  is not in the layout flow at all: a front-and-center modal
+  (ExportModal) with a bottom-right pill (ExportPill) as its minimized
+  form; both hide themselves when no job exists.
+- **Resizable work area (seams)**: at `xl` and up, draggable grips
+  (the `Resizer` component, `role="separator"`, `data-layout` on the
+  root) sit between the five regions: stage|timeline, timeline|
+  filmstrip, left|right column, options|clipqueue. A drag sets one
+  region's fixed pixel size - the page records the region's size at
+  drag start (`offsetHeight`, measured; the column width comes from
+  `layout.right`) and applies the total pointer delta clamped by
+  `LAYOUT_LIMITS` (right 280-800, stage 140-1200, strip 72-320,
+  options 96-900). Double-click resets that region to its natural
+  size. The sizes live in `layout` state (a `WorkLayout`:
+  `right` number, `stage`/`strip`/`options` number-or-null, null =
+  natural height) and feed the grid templates through CSS variables:
+  outer `xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)]`, left
+  `xl:grid-rows-[var(--lm-stage,auto)_auto_auto_auto_var(--lm-strip,108px)]`,
+  right `xl:grid-rows-[var(--lm-opts,auto)_auto_minmax(0,1fr)]` -
+  unset variables fall back to the old fixed/auto sizes. The layout
+  persists to localStorage (`clipmaker.layout.v1`) on drag end and
+  reset via `saveLayout`/`loadLayout` (lib/layout.ts, self-healing on
+  corrupt storage). Seams are hidden below `xl`. The seam `Resizer`
+  must NOT `preventDefault` on `pointerdown` - cancelling it suppresses
+  the compat mouse events the double-click reset relies on; selection
+  is already covered by the body `user-select: none` set during a
+  drag. The inert-background click handler ignores `[data-layout]`
+  (seam clicks never leave a clip preview). Resizing the stage row
+  switches the Stage into `fit` mode; the Filmstrip row defaults to
+  108px and its thumbnails scale with the row height; the
+  OptionsPanel scrolls its form when the row is shorter than its
+  natural content.
 - **Export modal**: the view is the `exportView` reducer (modal |
   pill; with no jobs nothing renders). It opens on export and
   auto-opens on an inactive->active jobs transition (covers page
@@ -435,9 +466,10 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 175 unit tests over the pure libs (times, bitrate,
+- `bun test` - 204 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, crop, args, clipsTxt, clips, types, jobs,
-  stages, exportView, clipSession, ingest, ffmpeg's once).
+  stages, exportView, clipSession, layout, filmstrip, ingest, ffmpeg's
+  once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
