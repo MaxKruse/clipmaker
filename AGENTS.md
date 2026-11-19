@@ -38,6 +38,7 @@ src/lib/jobs.ts     export list display order (newest batch first, clip order wi
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
+src/lib/avif.ts       avifDurationLevel - length-based AVIF encode warning (45s/60s)
 src/lib/types.ts    VideoInfo, ClipSpec, Job, ProbeResult + defaults
 src/lib/human.ts    human sizes ("4.7 MB")
       -- everything above is pure and unit-tested (test/*.test.ts) --
@@ -96,7 +97,10 @@ Key invariants:
   applies to GIF/AVIF - `fps` is the shared intermediate's frame rate
   and the full tier's; `maxMB`/`maxEdge` cap the sharable tier (maxEdge
   options 256-1440; the ladder is capped at the source/crop width and
-  never upscales). Defaults in `types.ts:defaultClip()`.
+  never upscales). New and imported clips default to
+  `formats: ["mp4", "avif"]` (gif is the opt-in fallback) and
+  `maxEdge: 1000`; the rest of the defaults are in
+  `types.ts:defaultClip()`.
 - `Job { id, videoId, videoName, clip, clipNo, status, stage, pct,
   outputs, warning?, error?, createdAt }` - `status` is queued/running/
   done/error. `stage` is the structured `JobStage` (stages.ts) while
@@ -328,6 +332,11 @@ Key invariants:
   quality) renders only when the clip's formats include mp4, and the
   the GIF / AVIF section (frame rate, sharable size cap, sharable max
   edge) only when gif/avif is selected.
+- **AVIF duration warning**: AV1 encodes are slow, so a clip whose
+  formats include avif warns by length - yellow (`text-warn`) above 45s,
+  red (`text-danger`) above 60s. The OptionsPanel shows it in the
+  GIF/AVIF section; ClipQueue rows show a matching `slow` chip. The
+  level comes from `avifDurationLevel` (lib/avif.ts, pure, unit-tested).
 
 ## Gotchas
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
@@ -368,9 +377,9 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 152 unit tests over the pure libs (times, bitrate,
-  ladder, names, crop, args, clipsTxt, clips, jobs, stages, exportView,
-  clipSession, ingest, ffmpeg's once).
+- `bun test` - 156 unit tests over the pure libs (times, bitrate,
+  avif, ladder, names, crop, args, clipsTxt, clips, jobs, stages,
+  exportView, clipSession, ingest, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the

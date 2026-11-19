@@ -27,13 +27,13 @@ mark the in and out points.
 
 ![](docs/screenshot-3-crop.png)
 
-Optional crop: the player glows while you drag a rectangle over the
-frame.
+Optional crop: drag a rectangle over the frame - the crop updates live
+while you drag.
 
 ![](docs/screenshot-4-main.png)
 
 The finished clip: the crop box sits over the frame, the timeline holds
-the in/out range, and the clip (with its MP4/GIF and crop chips) is
+the in/out range, and the clip (with its MP4/AVIF and crop chips) is
 ready in the queue.
 
 ## How to run
@@ -79,13 +79,16 @@ For a production build: `bun run build && bun run start` (same port).
    A thin scrub bar sits directly under the video: click or drag it
    to jump anywhere; the active in/out range shows as a band.
 4. **Tune the export** - per clip: note, formats (mp4, gif, avif - any
-   combination), audio on/off, frame rate (MP4: 25/30/60, default 60;
-   GIF/AVIF: 15/20/25/30/60, default 30), MP4 quality (matched to the
+   combination; new and imported clips default to MP4 + AVIF, GIF is the
+   opt-in fallback), audio on/off, frame rate (MP4: 25/30/60, default
+   60; GIF/AVIF: 15/20/25/30/60, default 30), MP4 quality (matched to the
    source by default, or a manual bitrate), and for GIFs/AVIFs a size cap
-   (10/25/48 MB) plus a maximum edge length (256-1440 px) for the
-   sharable copy - it is never upscaled, so a crop smaller than the max
-   edge just keeps the best resolution it has. The full-res original is
-   always exported with it, no cap.
+   (10/25/48 MB) plus a maximum edge length (256-1440 px, default 1000)
+   for the sharable copy - it is never upscaled, so a crop smaller than
+   the max edge just keeps the best resolution it has. The full-res
+   original is always exported with it, no cap. AVIF encodes are slow,
+   so a clip that includes AVIF warns in yellow once it is longer than
+   45 seconds and in red above 60 seconds.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -147,7 +150,7 @@ File format - one clip per line:
 - Blank lines are ignored and unparseable lines are skipped. Ranges are
   clamped to the video's length.
 
-Imported clips get the default settings (MP4 + GIF, audio on, MP4 at
+Imported clips get the default settings (MP4 + AVIF, audio on, MP4 at
 60 fps, GIF/AVIF at 30 fps) and can be adjusted individually in the
 queue before export.
 
