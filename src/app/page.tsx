@@ -4,6 +4,7 @@ import { useEffect, useReducer, useRef, useState, type CSSProperties, type RefOb
 import { ClipQueue } from "@/components/ClipQueue";
 import type { Aspect } from "@/components/CropOverlay";
 import { ExportModal } from "@/components/ExportModal";
+import { ExportPlanModal } from "@/components/ExportPlanModal";
 import { ExportPill } from "@/components/ExportPill";
 import { Filmstrip } from "@/components/Filmstrip";
 import { OptionsPanel } from "@/components/OptionsPanel";
@@ -52,8 +53,9 @@ export default function Page() {
   const [aspect, setAspect] = useState<Aspect>("free");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
-  // Save-timestamps action feedback (drives the ClipQueue button label).
-  const [txtState, setTxtState] = useState<"idle" | "saving" | "saved">("idle");
+  // The export plan modal (opened by "Export clips"): the clip list with
+  // checkboxes + the combine toggle, instead of auto-starting the export.
+  const [exportPlan, setExportPlan] = useState(false);
   // What the page-load ingest sweep did (null when it found nothing).
   const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
   // The video manager modal (loaded list + add/import) is collapsed behind
@@ -471,7 +473,10 @@ export default function Page() {
     }
   };
 
-  const exportAll = async () => {
+  // Enqueue the export the plan modal approved: `combine` groups
+  // same-name clips into one job each (a single mp4 "highlights" file,
+  // parts concatenated with fades). Success opens the progress modal.
+  const startExport = async (selected: ClipSpec[], combine: boolean) => {
     if (!active) return;
     setExporting(true);
     setExportError(null);
@@ -479,32 +484,16 @@ export default function Page() {
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ videoId: active.id, clips: activeClips }),
+        body: JSON.stringify({ videoId: active.id, clips: selected, combine }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? res.statusText);
+      setExportPlan(false);
       exportView.show();
     } catch (e) {
       setExportError(e instanceof Error ? e.message : String(e));
     } finally {
       setExporting(false);
-    }
-  };
-
-  // Save the active video's clips to out/<videoId>/timestamps.txt on disk
-  // (one line per clip, no header line). The ClipQueue button shows
-  // saving/saved feedback while it runs.
-  const saveTimestamps = async () => {
-    if (!active || activeClips.length === 0) return;
-    setTxtState("saving");
-    try {
-      const res = await fetch(`/api/videos/${active.id}/timestamps`, { method: "POST" });
-      if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
-      setTxtState("saved");
-      window.setTimeout(() => setTxtState("idle"), 2000);
-    } catch (e) {
-      setExportError(e instanceof Error ? e.message : String(e));
-      setTxtState("idle");
     }
   };
 
@@ -665,9 +654,7 @@ export default function Page() {
               onAdd={addClip}
               onSelect={selectClip}
               onDelete={deleteClip}
-              onExport={exportAll}
-              onExportTxt={saveTimestamps}
-              txtState={txtState}
+              onExport={() => setExportPlan(true)}
             />
             </div>
           </div>
@@ -681,6 +668,13 @@ export default function Page() {
         <ExportModal jobs={jobs} onDismiss={exportView.dismiss} onClear={clearFinished} onCancel={cancelOne} />
       ) : (
         <ExportPill jobs={jobs} onView={exportView.show} />
+      )}
+      {exportPlan && active && (
+        <ExportPlanModal
+          clips={activeClips}
+          onClose={() => setExportPlan(false)}
+          onStart={startExport}
+        />
       )}
       {videoModalOpen && (
         <VideoModal
