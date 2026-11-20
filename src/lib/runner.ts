@@ -11,7 +11,7 @@ import {
   type AvifEncoder,
   type Mp4Encoder,
 } from "./args";
-import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
+import { resolveOutKbit } from "./bitrate";
 import { comboDuration, comboFade, comboTarget } from "./combine";
 import {
   avifEncoder,
@@ -248,15 +248,7 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   }
 
   const encoder = await pickEncoder();
-  const srcKbit = resolveSourceKbit({
-    videoKbit: video.videoKbit,
-    formatKbit: video.formatKbit,
-    audioKbit: video.audioKbit,
-  });
-  const kbit =
-    first.quality.mode === "manual" && first.quality.kbit > 0
-      ? Math.round(first.quality.kbit)
-      : targetVideoKbit(srcKbit, video.fps, fps);
+  const kbit = resolveOutKbit(video, fps, first.quality);
   const outName = clipFileName(job.clipNo, first.note, "mp4");
   const outPath = path.join(outDir, outName);
   const concat = () =>
@@ -293,15 +285,7 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   // first frame is the exact frame a player shows at that sub-second.
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const srcKbit = resolveSourceKbit({
-    videoKbit: video.videoKbit,
-    formatKbit: video.formatKbit,
-    audioKbit: video.audioKbit,
-  });
-  const kbit =
-    clip.quality.mode === "manual" && clip.quality.kbit > 0
-      ? Math.round(clip.quality.kbit)
-      : targetVideoKbit(srcKbit, video.fps, clip.fps);
+  const kbit = resolveOutKbit(video, clip.fps, clip.quality);
   const encoder = await pickEncoder();
   throwIfCancelled(job);
   const outName = clipFileName(job.clipNo, clip.note, "mp4");

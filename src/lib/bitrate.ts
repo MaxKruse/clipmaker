@@ -27,3 +27,16 @@ export function resolveSourceKbit(v: {
   }
   return 6000;
 }
+
+/**
+ * The kbit an MP4 encode targets: the user's manual kbit when set,
+ * else the source bitrate scaled for the fps change.
+ */
+export function resolveOutKbit(
+  v: { videoKbit: number | null; formatKbit: number | null; audioKbit: number | null; fps: number },
+  outFps: number,
+  quality: { mode: "source" | "manual"; kbit: number },
+): number {
+  if (quality.mode === "manual" && quality.kbit > 0) return Math.round(quality.kbit);
+  return targetVideoKbit(resolveSourceKbit(v), v.fps, outFps);
+}
