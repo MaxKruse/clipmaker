@@ -55,7 +55,8 @@ src/lib/avif.ts       avifDurationLevel (length-based AVIF encode warning, 45s/6
                     avifWarningText (the shared user-facing warning sentence)
 src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, MIN_CLIP_SECONDS +
                     defaultClip(note, defaults) / defaultClipDefaults() /
-                    toggleFormatIn (formats list, keeps at least one)
+                    toggleFormatIn (formats list, keeps at least one) /
+                    defaultsSummary (live one-line defaults text)
 src/lib/human.ts    human sizes ("4.7 MB")
 src/lib/dialogStack.ts last-opened-dialog-wins Esc stack (push/pop/isTop)
       -- everything above is pure and unit-tested (test/*.test.ts) --
@@ -77,7 +78,9 @@ src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; t
 src/app/api/**      thin route handlers over store/runner
 src/components/**   UI, all "use client"; useExportView.ts is the thin hook
                     around the exportView reducer; Dialog.tsx is the
-                    shared modal chrome (backdrop, stacked Esc, focus)
+                    shared modal chrome (backdrop, stacked Esc, focus);
+                    SettingsModal.tsx is the settings page for the
+                    new-clip defaults
 src/app/page.tsx    page state owner (videos, clips, draft, jobs polling); the
                     export view and clip session run as explicit machines
 ```
@@ -525,14 +528,19 @@ Key invariants:
   quality) renders only when the clip's formats include mp4, and the
   the GIF / AVIF section (frame rate, sharable size cap, sharable max
   edge) only when gif/avif is selected.
-- **Defaults menu**: the OptionsPanel header row (next to the
-  "Clip options" label) has a `Defaults` toggle (active:
-  `border-accent/60 text-accent`) that opens a `bg-panel2` section
-  for the new-clip settings: format pills (at least one kept by
-  `toggleDefaultsFormat`), MP4 frame rate, audio, MP4 quality
-  (source/manual + kbit), and GIF/AVIF frame rate / size cap / max
-  edge. Every change PUTs `/api/defaults` immediately (no debounce);
-  the page fetches the object on mount. New drafts (`freshDraft` in
+- **Settings modal (new-clip defaults)**: the top bar's `Settings`
+  button (`ml-auto`) opens `SettingsModal` - the Dialog-chrome modal
+  for the persisted `ClipDefaults` (`.data/defaults.json`): an intro
+  paragraph, a live one-line summary of the current settings
+  (`defaultsSummary` in lib/types.ts, pure, unit-tested), and the
+  sections Formats (pills, at least one kept by `toggleFormatIn`,
+  with a hint per selected format), MP4 video (frame rate, audio,
+  source/manual quality + kbit input), and GIF / AVIF (frame rate,
+  size cap, max edge, the slow-encode note). Every change PUTs
+  `/api/defaults` immediately via the page's `saveDefaults` (no
+  debounce); the page fetches the object on mount. `Reset to defaults`
+  (btn-danger) asks a native `confirm()` first, then
+  `onChange(defaultClipDefaults())`. New drafts (`freshDraft` in
   page.tsx) and imported clips are created via
   `defaultClip(note, defaults)`; existing clips keep their own
   settings, and "Add clip" with a clip selected still copies that
@@ -597,7 +605,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 248 unit tests over the pure libs (times, bitrate,
+- `bun test` - 253 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, ffmpeg's once).

@@ -94,10 +94,10 @@ port).
    the max edge just keeps the best resolution it has. The full-res
    original is always exported with it, no cap. AVIF encodes are slow,
    so a clip that includes AVIF warns in yellow once it is longer than
-   45 seconds and in red above 60 seconds. The **Defaults** button at
-   the top of the clip options panel sets these options once for all
-   new and imported clips (persisted in `.data/defaults.json`);
-   existing clips always keep their own settings.
+   45 seconds and in red above 60 seconds. The **Settings** page (the
+   Settings button in the top bar) sets these options once for all new
+   and imported clips (persisted in `.data/defaults.json`); existing
+   clips always keep their own settings.
 5. **"Add clip"** starts a clip: it is created right away (at the
    playhead if you have not marked a range yet) and selected, and the
    app guides you - the timeline glows so you can set the exact times,
@@ -185,9 +185,9 @@ File format - one clip per line:
   clamped to the video's length.
 
 Imported clips get the default settings (MP4 + AVIF, audio on, MP4 at
-60 fps, GIF/AVIF at 30 fps - configurable via the **Defaults** button
-in the clip options) and can be adjusted individually in the queue
-before export.
+60 fps, GIF/AVIF at 30 fps - configurable in the **Settings** page in
+the top bar) and can be adjusted individually in the queue before
+export.
 
 The other direction is automatic: every time your clip list is saved,
 clipmaker writes `out/<video-id>/timestamps.txt` - one
