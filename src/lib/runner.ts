@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildAvifArgs,
+  buildConcatArgs,
+  buildComboCutArgs,
   buildGifPaletteArgs,
   buildGifStage1Args,
   buildGifStage3Args,
@@ -10,6 +12,7 @@ import {
   type Mp4Encoder,
 } from "./args";
 import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
+import { comboDuration, comboFade, comboTarget } from "./combine";
 import {
   avifEncoder,
   CancelledError,
@@ -163,6 +166,10 @@ async function runJob(job: Job) {
   fs.mkdirSync(tmp, { recursive: true });
   const outDir = path.join(OUT_DIR, job.videoId);
   fs.mkdirSync(outDir, { recursive: true });
+  if (job.clips && job.clips.length > 1) {
+    await runCombined(video, job, tmp, outDir);
+    return;
+  }
   if (job.clip.formats.includes("mp4")) await encodeMp4(video, job, outDir);
   const wantsGif = job.clip.formats.includes("gif");
   const wantsAvif = job.clip.formats.includes("avif");
@@ -189,6 +196,91 @@ async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
     buildGifStage1Args({ in: video.path, out: inter, start, dur, fps: clip.anim.fps, crop: clip.crop }),
     dur,
   );
+}
+
+/**
+ * Combined export: same-name clips concatenated into ONE mp4 "highlights"
+ * file (mp4 only). Each part is cut from the source at the group's target
+ * size and fps with its intro/outro fades, then the parts are
+ * concatenated (concat demuxer, re-encoded with the mp4 recipe) with the
+ * usual duration check + one retry.
+ */
+async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: string) {
+  const parts = job.clips!;
+  const first = parts[0];
+  const target = comboTarget(parts, video);
+  // One combined stream: if any part keeps audio (and the source has
+  // audio) the file has audio - parts with audio off contribute a silent
+  // track, so the concat never mixes streams with/without audio.
+  const groupAudio = video.hasAudio && parts.some((c) => c.audio);
+  const fps = first.fps;
+  const total = comboDuration(parts, video.fps);
+  const segs: string[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    const start = frameAt(part.start, video.fps);
+    const dur = part.end - start;
+    throwIfCancelled(job);
+    job.stage = { id: "combo-cut", index: i + 1, total: parts.length };
+    const f = path.join(tmp, `seg-${i}.mp4`);
+    await runTracked(
+      job,
+      findBin("ffmpeg"),
+      buildComboCutArgs({
+        in: video.path,
+        out: f,
+        start,
+        dur,
+        fps,
+        crop: part.crop,
+        targetW: target.w,
+        targetH: target.h,
+        fade: comboFade(dur),
+        audio: groupAudio ? (part.audio ? "source" : "silent") : "none",
+      }),
+      dur,
+    );
+    segs.push(f);
+  }
+
+  const encoder = await pickEncoder();
+  const srcKbit = resolveSourceKbit({
+    videoKbit: video.videoKbit,
+    formatKbit: video.formatKbit,
+    audioKbit: video.audioKbit,
+  });
+  const kbit =
+    first.quality.mode === "manual" && first.quality.kbit > 0
+      ? Math.round(first.quality.kbit)
+      : targetVideoKbit(srcKbit, video.fps, fps);
+  const outName = clipFileName(job.clipNo, first.note, "mp4");
+  const outPath = path.join(outDir, outName);
+  const concat = () =>
+    runTracked(
+      job,
+      findBin("ffmpeg"),
+      buildConcatArgs({
+        list: writeConcatList(tmp, "concat.txt", segs),
+        out: outPath,
+        audio: groupAudio,
+        encoder,
+        kbit,
+      }),
+      total,
+    );
+  job.stage = { id: "mp4-encode", encoder, kbit, fps };
+  await concat();
+  const warn = await checkDurationOrRetry(outPath, total, fps, job, concat);
+  if (warn) job.warning = warn;
+  job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size });
+  store.updateJob(job);
+}
+
+/** A concat-demuxer list file pointing at the given segments. */
+function writeConcatList(tmp: string, name: string, segs: string[]): string {
+  const list = path.join(tmp, name);
+  fs.writeFileSync(list, segs.map((s) => `file '${s.replaceAll("'", "'\\''")}'`).join("\n") + "\n");
+  return list;
 }
 
 async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {

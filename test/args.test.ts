@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildAvifArgs,
+  buildConcatArgs,
+  buildComboCutArgs,
   buildGifPaletteArgs,
   buildGifStage1Args,
   buildGifStage3Args,
@@ -199,5 +201,98 @@ describe("buildAvifArgs", () => {
     const iv = args.indexOf("-c:v");
     expect(args.slice(iv, iv + 5)).toEqual(["-c:v", "libaom-av1", "-crf", "42", "-pix_fmt"]);
     expect(args[args.length - 1]).toBe("b.avif");
+  });
+});
+
+describe("buildComboCutArgs", () => {
+  const s = {
+    in: "vod.mp4",
+    out: "seg.mp4",
+    start: 12.5,
+    dur: 7.25,
+    fps: 30,
+    crop: CROP,
+    targetW: 1920,
+    targetH: 1080,
+    fade: 0.5,
+    audio: "source" as const,
+  };
+
+  test("source audio: crop, scale+pad to target, fps, fades on both edges, aac audio", () => {
+    expect(buildComboCutArgs(s)).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-ss", "12.5", "-i", "vod.mp4",
+      "-vf",
+      "crop=1280:720:0:0," +
+        "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2," +
+        "fps=30," +
+        "fade=t=in:st=0:d=0.5,fade=t=out:st=6.75:d=0.5," +
+        "setpts=PTS-STARTPTS",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p",
+      "-af", "afade=t=in:st=0:d=0.5,afade=t=out:st=6.75:d=0.5", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+      "-t", "7.25", "seg.mp4",
+    ]);
+  });
+
+  test("silent audio: anullsrc input, aac track, no -af on the source", () => {
+    const args = buildComboCutArgs({ ...s, audio: "silent" });
+    expect(args).toContain("anullsrc=r=48000:cl=stereo");
+    expect(args).toContain("-c:a");
+    expect(args).not.toContain("-af");
+    expect(args).not.toContain("-an");
+  });
+
+  test("no audio: -an, no anullsrc, no -af", () => {
+    const args = buildComboCutArgs({ ...s, audio: "none" });
+    expect(args).toContain("-an");
+    expect(args).not.toContain("anullsrc");
+    expect(args).not.toContain("-af");
+  });
+
+  test("no crop -> scale+pad only (still pads to the group target)", () => {
+    const args = buildComboCutArgs({ ...s, crop: null, targetW: 640, targetH: 360, fade: 0.3 });
+    const vf = args[args.indexOf("-vf") + 1];
+    expect(vf.startsWith("crop")).toBe(false);
+    expect(vf.startsWith("scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:")).toBe(true);
+    expect(vf).toContain("fade=t=out:st=6.95:d=0.3");
+  });
+});
+
+describe("buildConcatArgs", () => {
+  test("concat demuxer + the mp4 recipe (nvenc, audio)", () => {
+    expect(
+      buildConcatArgs({
+        list: "list.txt",
+        out: "combined.mp4",
+        audio: true,
+        encoder: "h264_nvenc",
+        kbit: 2500,
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-f", "concat", "-safe", "0", "-i", "list.txt",
+      "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr",
+      "-multipass", "fullres",
+      "-b:v", "2500k", "-maxrate", "3750k", "-bufsize", "5000k",
+      "-rc-lookahead", "32", "-spatial-aq", "1", "-profile:v", "high",
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+      "-movflags", "+faststart", "combined.mp4",
+    ]);
+  });
+
+  test("x264 fallback + no audio", () => {
+    const args = buildConcatArgs({
+      list: "list.txt",
+      out: "combined.mp4",
+      audio: false,
+      encoder: "libx264",
+      kbit: 1234,
+    });
+    expect(args).toContain("-c:v");
+    expect(args[args.indexOf("-c:v") + 1]).toBe("libx264");
+    expect(args).toContain("-b:v");
+    expect(args[args.indexOf("-b:v") + 1]).toBe("1234k");
+    expect(args).toContain("-an");
+    expect(args).not.toContain("-c:a");
   });
 });

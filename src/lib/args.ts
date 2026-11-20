@@ -20,6 +20,31 @@ export interface Mp4Args {
 }
 
 /**
+ * The mp4 video-encode options block, shared by the single-clip MP4
+ * stage and the combined-export concat (same encoder, same bitrate
+ * control, so the recipe stays one source of truth).
+ */
+function mp4VideoEncoderArgs(encoder: Mp4Encoder, kbit: number): string[] {
+  if (encoder === "h264_nvenc") {
+    return [
+      "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr",
+      "-multipass", "fullres",
+      "-b:v", `${kbit}k`,
+      "-maxrate", `${Math.round(kbit * 1.5)}k`,
+      "-bufsize", `${kbit * 2}k`,
+      "-rc-lookahead", "32", "-spatial-aq", "1", "-profile:v", "high",
+    ];
+  }
+  return [
+    "-c:v", "libx264", "-preset", "slow",
+    "-b:v", `${kbit}k`,
+    "-maxrate", `${Math.round(kbit * 1.5)}k`,
+    "-bufsize", `${kbit * 2}k`,
+    "-profile:v", "high",
+  ];
+}
+
+/**
  * Frame-accurate mp4 cut: everything re-encoded, audio padded with apad,
  * output -t does the final cut. Never stream-copied (the "empty tail" bug).
  */
@@ -32,24 +57,7 @@ export function buildMp4Args(s: Mp4Args): string[] {
     "-ss", fmt(s.start), "-i", s.in,
     "-vf", vf,
   ];
-  if (s.encoder === "h264_nvenc") {
-    a.push(
-      "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "vbr",
-      "-multipass", "fullres",
-      "-b:v", `${s.kbit}k`,
-      "-maxrate", `${Math.round(s.kbit * 1.5)}k`,
-      "-bufsize", `${s.kbit * 2}k`,
-      "-rc-lookahead", "32", "-spatial-aq", "1", "-profile:v", "high",
-    );
-  } else {
-    a.push(
-      "-c:v", "libx264", "-preset", "slow",
-      "-b:v", `${s.kbit}k`,
-      "-maxrate", `${Math.round(s.kbit * 1.5)}k`,
-      "-bufsize", `${s.kbit * 2}k`,
-      "-profile:v", "high",
-    );
-  }
+  a.push(...mp4VideoEncoderArgs(s.encoder, s.kbit));
   if (s.audio) {
     a.push("-af", "asetpts=PTS-STARTPTS,apad", "-c:a", "aac", "-b:a", "192k", "-ar", "48000");
   } else {
@@ -170,4 +178,84 @@ export function buildPreviewArgs(s: {
     "-vf", vf,
     s.out,
   ];
+}
+
+/**
+ * Combined-export part: one clip cut from the source, normalized to the
+ * group's target size (scale-to-fit + center pad, so different crops in
+ * one group never mix resolutions), re-timed to the group fps, with the
+ * part's intro/outro fades on both edges (fade length pre-clamped by
+ * comboFade). Video is always the fast intermediate encode; audio is the
+ * source aac, a silent aac track (parts with audio off in a group that
+ * has audio), or nothing.
+ */
+export function buildComboCutArgs(s: {
+  in: string;
+  out: string;
+  start: number;
+  dur: number;
+  fps: number;
+  crop: CropBox | null;
+  targetW: number;
+  targetH: number;
+  fade: number;
+  audio: "source" | "silent" | "none";
+}): string[] {
+  const fadeOut = Math.max(0, s.dur - s.fade);
+  const vf = [
+    cropFilter(s.crop),
+    `scale=${s.targetW}:${s.targetH}:force_original_aspect_ratio=decrease,pad=${s.targetW}:${s.targetH}:(ow-iw)/2:(oh-ih)/2`,
+    `fps=${s.fps}`,
+    `fade=t=in:st=0:d=${fmt(s.fade)}`,
+    `fade=t=out:st=${fmt(fadeOut)}:d=${fmt(s.fade)}`,
+    "setpts=PTS-STARTPTS",
+  ]
+    .filter(Boolean)
+    .join(",");
+  const a = [
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+    "-ss", fmt(s.start), "-i", s.in,
+  ];
+  if (s.audio === "silent") {
+    a.push("-f", "lavfi", "-t", fmt(s.dur), "-i", "anullsrc=r=48000:cl=stereo");
+  }
+  a.push("-vf", vf);
+  a.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p");
+  if (s.audio === "source") {
+    a.push(
+      "-af", `afade=t=in:st=0:d=${fmt(s.fade)},afade=t=out:st=${fmt(fadeOut)}:d=${fmt(s.fade)}`,
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+    );
+  } else if (s.audio === "silent") {
+    a.push("-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  } else {
+    a.push("-an");
+  }
+  a.push("-t", fmt(s.dur), s.out);
+  return a;
+}
+
+/**
+ * Concatenate pre-cut combined-export parts (concat demuxer list) into
+ * the final mp4, re-encoded with the mp4 recipe (same encoder + bitrate
+ * control as a single-clip export). Re-encoding (never stream-copy)
+ * keeps the output uniform and gives the fade-filtered parts one clean
+ * container.
+ */
+export function buildConcatArgs(s: {
+  list: string;
+  out: string;
+  audio: boolean;
+  encoder: Mp4Encoder;
+  kbit: number;
+}): string[] {
+  const a = [
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+    "-f", "concat", "-safe", "0", "-i", s.list,
+    ...mp4VideoEncoderArgs(s.encoder, Math.round(s.kbit)),
+  ];
+  if (s.audio) a.push("-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  else a.push("-an");
+  a.push("-movflags", "+faststart", s.out);
+  return a;
 }

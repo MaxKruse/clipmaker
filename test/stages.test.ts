@@ -8,6 +8,7 @@ import { stageText, type JobStage } from "../src/lib/stages";
 test("renders the pipeline stages in the legacy wording", () => {
   const cases: [JobStage, string][] = [
     [{ id: "starting" }, "starting"],
+    [{ id: "combo-cut", index: 2, total: 4 }, "combine: part 2/4"],
     [{ id: "mp4-encode", encoder: "h264_nvenc", kbit: 4500, fps: 60 }, "mp4 h264_nvenc 4500k 60fps"],
     [{ id: "mp4-encode", encoder: "libx264", kbit: 2500, fps: 30 }, "mp4 libx264 2500k 30fps"],
     [{ id: "mp4-retry" }, "mp4 retry"],

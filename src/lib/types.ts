@@ -107,6 +107,14 @@ export interface Job {
   clip: ClipSpec;
   /** 1-based clip number used for output naming. */
   clipNo: number;
+  /**
+   * Present when this job concatenates a group of same-name clips
+   * (the "combine" export): the parts in file order. The job produces
+   * ONE mp4 "highlights" file (mp4 only - no gif/avif). `clip`/`clipNo`
+   * are the group's first member (naming + display); the runner uses
+   * `clips` for the whole job. Absent on ordinary single-clip jobs.
+   */
+  clips?: ClipSpec[];
   status: JobStatus;
   stage: JobStage | null;
   pct: number;

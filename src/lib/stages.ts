@@ -6,6 +6,7 @@
  */
 export type JobStage =
   | { id: "starting" }
+  | { id: "combo-cut"; index: number; total: number }
   | { id: "mp4-encode"; encoder: string; kbit: number; fps: number }
   | { id: "mp4-retry" }
   | { id: "anim-cut" }
@@ -23,6 +24,8 @@ export function stageText(s: JobStage): string {
   switch (s.id) {
     case "starting":
       return "starting";
+    case "combo-cut":
+      return `combine: part ${s.index}/${s.total}`;
     case "mp4-encode":
       return `mp4 ${s.encoder} ${s.kbit}k ${s.fps}fps`;
     case "mp4-retry":
