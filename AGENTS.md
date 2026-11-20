@@ -417,17 +417,24 @@ Key invariants:
   OptionsPanel scrolls its form when the row is shorter than its
   natural content.
 - **Export plan modal**: the ClipQueue "Export N clips" button does NOT
-  start the export - it opens `ExportPlanModal` (a near-fullscreen
-  dialog, `aria-label="Export clips"`). Every clip is a checked row
-  (select-all checkbox), plus a "combine same-name clips" toggle with
-  the hint "combined clips export as one mp4 (no gif/avif)". The footer
-  shows `N clips - M exports`, where M = selected count, or
-  `groupCombine(selected).length` when combine is on. "Start export"
-  (disabled at 0 selected) calls `startExport(selected, combine)` in
-  page.tsx, which POSTs `/api/export` with the ticked clips +
-  `combine`, then closes the plan and opens the export view. Like the
-  export modal it captures Esc/backdrop so they do not leak to the
-  clip preview underneath.
+  start the export - it opens `ExportPlanModal` (`aria-label="Export
+  clips"`): a compact centered card dialog (max-w-xl, not full-screen)
+  with a bordered header, a scrollable body, and a bordered footer.
+  Clips are cards (rounded-lg, custom accent-filled checkbox drawn with
+  CSS - the input stays sr-only; an unticked card is dimmed at
+  opacity-50), plus "select all" and "combine same-name clips"
+  checkboxes. With combine on, a "combined highlights" preview lists
+  the files the export WOULD create: one card per multi-clip same-name
+  group (note, part count, total duration via `comboDuration` +
+  `videoFps`, mp4 chip, "one mp4 per group - 0.5s fade per part" hint);
+  a group card is dimmed while any of its clips is unticked and shows
+  `parts of N parts` when partial. The footer shows `N clips - M
+  exports`, where M = selected count, or `groupCombine(selected).length`
+  when combine is on. "Start export" (disabled at 0 selected) calls
+  `startExport(selected, combine)` in page.tsx, which POSTs
+  `/api/export` with the ticked clips + `combine`, then closes the plan
+  and opens the export view. Like the export modal it captures
+  Esc/backdrop so they do not leak to the clip preview underneath.
 - **Export modal**: the view is the `exportView` reducer (modal |
   pill; with no jobs nothing renders). It opens on export and
   auto-opens on an inactive->active jobs transition (covers page

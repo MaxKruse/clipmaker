@@ -672,6 +672,7 @@ export default function Page() {
       {exportPlan && active && (
         <ExportPlanModal
           clips={activeClips}
+          videoFps={active.fps}
           onClose={() => setExportPlan(false)}
           onStart={startExport}
         />

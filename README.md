@@ -106,14 +106,16 @@ port).
    your clips are there after a reload. Selecting an existing clip
    edits it the same way. You can queue several clips from one video
    and export them all at once.
-6. **Export** - clicking "Export" first opens an export plan: a
-   full-screen list of your clips with a checkbox each (all ticked by
-   default), a select-all, and a **"combine same-name clips"** toggle.
-   Combining merges every group of clips that share the same note into
-   ONE MP4 "highlights" file per group - each part fades in and out
-   over 0.5 seconds - and combined clips are exported as MP4 only (no
-   GIF/AVIF). Unticked clips are skipped. "Start export" closes the
-   plan and starts the jobs; several jobs run in parallel (two at a
+6. **Export** - clicking "Export" first opens an export plan: your
+   clips as a card list with a checkbox each (all ticked by default), a
+   select-all, and a **"combine same-name clips"** toggle. Combining
+   merges every group of clips that share the same note into ONE MP4
+   "highlights" file per group - each part fades in and out over 0.5
+   seconds - and combined clips are exported as MP4 only (no GIF/AVIF);
+   with the toggle on the plan previews the highlights files it would
+   create (group, part count, total length), dimming a group while any
+   of its clips is unticked. Unticked clips are skipped. "Start export"
+   closes the plan and starts the jobs; several jobs run in parallel (two at a
    time by default, raise it with the CLIPMAKER_CONCURRENCY env var).
    A front-and-center export view opens: an overall progress bar plus a
    progress bar and stage text per clip (e.g. `gif: sharable 512p25
