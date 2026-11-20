@@ -27,3 +27,28 @@ export function clipFileName(
   const base = t ? `clip${n}-${t}` : `clip${n}`;
   return ext === "gif" && edgePx ? `${base}-${edgePx}.gif` : `${base}.${ext}`;
 }
+
+/**
+ * Combined highlights file name: `<note>-highlights.mp4`. Named after the
+ * group's note, never `clipN-...`, so it can never collide with the
+ * individual part exports (which the combined export produces alongside).
+ */
+export function highlightsFileName(note: string): string {
+  const t = sanitizeNote(note);
+  return t ? `${t}-highlights.mp4` : "highlights.mp4";
+}
+
+/**
+ * Content-disposition header for a download. RFC 6266: the plain
+ * `filename=` gets an ASCII-only fallback (non-ASCII dropped, quotes and
+ * backslashes removed, "download" when nothing is left), and the real
+ * name goes into the `filename*=UTF-8''...` extension.
+ */
+export function disposition(name: string): string {
+  let fallback = name
+    .replace(/[^\x21-\x7E]/g, "")
+    .replace(/["\\]/g, "")
+    .trim();
+  if (!fallback || fallback.startsWith(".")) fallback = "download";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}

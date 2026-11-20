@@ -110,7 +110,7 @@ describe("buildGifStage1Args", () => {
 describe("buildGifPaletteArgs", () => {
   test("palettegen from the temp mp4 only", () => {
     expect(buildGifPaletteArgs({ in: "inter.mp4", out: "pal.png" })).toEqual([
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4",
       "-vf", "scale=256:-2:flags=lanczos,palettegen=stats_mode=full",
       "pal.png",
@@ -123,7 +123,7 @@ describe("buildGifStage3Args", () => {
     expect(
       buildGifStage3Args({ in: "inter.mp4", pal: "pal.png", out: "out.gif", fps: 25, edge: 512 }),
     ).toEqual([
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4", "-i", "pal.png",
       "-lavfi", "fps=25,scale=512:-2:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
       "out.gif",
@@ -134,7 +134,7 @@ describe("buildGifStage3Args", () => {
     expect(
       buildGifStage3Args({ in: "inter.mp4", pal: "pal.png", out: "out.gif", fps: 25, edge: 512, axis: "h" }),
     ).toEqual([
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
       "-i", "inter.mp4", "-i", "pal.png",
       "-lavfi", "fps=25,scale=-2:512:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5",
       "out.gif",

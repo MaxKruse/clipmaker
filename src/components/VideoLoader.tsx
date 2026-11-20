@@ -28,12 +28,15 @@ export function VideoLoader({
   const fileRef = useRef<HTMLInputElement | null>(null);
   const txtRef = useRef<HTMLInputElement | null>(null);
   const [path, setPath] = useState("");
-  const [busy, setBusy] = useState<string | null>(null);
+  // In-flight add requests (multiple file uploads run in parallel).
+  const [busy, setBusy] = useState<string[]>([]);
+  const startBusy = (label: string) => setBusy((b) => [...b, label]);
+  const endBusy = (label: string) => setBusy((b) => b.filter((x) => x !== label));
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const fail = (text: string) => setMsg({ text, ok: false });
 
   const upload = async (f: File) => {
-    setBusy(f.name);
+    startBusy(f.name);
     setMsg(null);
     try {
       // Send the File as a plain Blob body, not f.stream() + duplex:
@@ -51,14 +54,14 @@ export function VideoLoader({
     } catch (e) {
       fail(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      endBusy(f.name);
     }
   };
 
   const addPath = async () => {
     const p = path.trim();
     if (!p) return;
-    setBusy(p);
+    startBusy(p);
     setMsg(null);
     try {
       const res = await fetch("/api/videos", {
@@ -73,7 +76,7 @@ export function VideoLoader({
     } catch (e) {
       fail(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusy(null);
+      endBusy(p);
     }
   };
 
@@ -114,7 +117,7 @@ export function VideoLoader({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={Boolean(busy)}>
+        <button className="btn btn-sm" onClick={() => fileRef.current?.click()} disabled={busy.length > 0}>
           Upload file
         </button>
         <input
@@ -128,7 +131,7 @@ export function VideoLoader({
             e.target.value = "";
           }}
         />
-        <button className="btn btn-sm" onClick={() => txtRef.current?.click()} disabled={Boolean(busy)}>
+        <button className="btn btn-sm" onClick={() => txtRef.current?.click()} disabled={busy.length > 0}>
           Clips (.txt)
         </button>
         <input
@@ -151,10 +154,14 @@ export function VideoLoader({
             if (e.key === "Enter") void addPath();
           }}
         />
-        <button className="btn btn-sm" onClick={addPath} disabled={Boolean(busy) || !path.trim()}>
+        <button className="btn btn-sm" onClick={addPath} disabled={busy.length > 0 || !path.trim()}>
           Add by path
         </button>
-        {busy && <span className="chip">loading: {busy}</span>}
+        {busy.length > 0 && (
+          <span className="chip">
+            loading: {busy.length === 1 ? busy[0] : `${busy.length} files`}
+          </span>
+        )}
       </div>
       {msg && (
         <span className={`text-xs break-words ${msg.ok ? "text-ok" : "text-danger"}`}>

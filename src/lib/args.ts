@@ -95,7 +95,7 @@ export function buildGifStage1Args(s: {
 /** GIF stage 2: per-clip palette from the temp mp4 (never the VOD). */
 export function buildGifPaletteArgs(s: { in: string; out: string }): string[] {
   return [
-    "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
     "-i", s.in,
     "-vf", "scale=256:-2:flags=lanczos,palettegen=stats_mode=full",
     s.out,
@@ -117,7 +117,7 @@ export function buildGifStage3Args(s: {
 }): string[] {
   const scale = s.axis === "h" ? `scale=-2:${s.edge}:flags=lanczos` : `scale=${s.edge}:-2:flags=lanczos`;
   return [
-    "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
     "-i", s.in, "-i", s.pal,
     "-lavfi",
     `fps=${s.fps},${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`,

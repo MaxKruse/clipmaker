@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
+import { Dialog } from "@/components/Dialog";
 import { humanSize } from "@/lib/human";
 import { batchTimeLabel, groupBatches, isActiveJob, resolveTier } from "@/lib/jobs";
 import { stageText } from "@/lib/stages";
@@ -132,31 +133,7 @@ interface Props {
  * stays open with the finished outputs until the user closes it.
  */
 export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
-  // The modal is the topmost overlay: while it is mounted, Esc acts on
-  // the modal, not on what is underneath (the clip preview's Esc).
-  // Capture phase + stopPropagation keeps the key from reaching the
-  // Stage's window listener (bubble phase).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      e.stopPropagation();
-      onDismiss();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onDismiss]);
-
-  // Focus lands on the close button while the modal is open (the page
-  // underneath is inert for the keyboard), and returns to where it was
-  // when the modal goes away.
   const closeRef = useRef<HTMLButtonElement | null>(null);
-  useEffect(() => {
-    const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeRef.current?.focus();
-    return () => {
-      if (prev && prev.isConnected) prev.focus();
-    };
-  }, []);
 
   if (jobs.length === 0) return null;
   const active = jobs.filter(isActiveJob);
@@ -174,82 +151,70 @@ export function ExportModal({ jobs, onDismiss, onClear, onCancel }: Props) {
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={(e) => {
-        // Backdrop clicks only (a click inside the panel bubbles up
-        // with the panel's element as target).
-        if (e.target !== e.currentTarget) return;
-        // Don't let the page's inert-background click leave the clip
-        // preview too - the user only asked for the modal to go away.
-        e.stopPropagation();
-        onDismiss();
-      }}
+    <Dialog
+      label="Export progress"
+      onClose={onDismiss}
+      overlay="items-center justify-center p-4"
+      panel="flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden"
+      focusRef={closeRef}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Export progress"
-        className="panel flex max-h-[85vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl"
-      >
-        <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
-          <JobStateDot state={allSettled ? (failed.length ? "failed" : "done") : "active"} className="size-5" />
-          <div className="min-w-0 flex-1">
-            <span className="block text-sm font-semibold">
-              {allSettled ? (failed.length ? "Export finished with errors" : "Export finished") : "Exporting clips"}
-            </span>
-            <span className="block font-mono text-[11px] text-muted">
-              {done.length} done{failed.length > 0 ? ` · ${failed.length} failed` : ""} · {jobs.length} total
-            </span>
-          </div>
-          <button ref={closeRef} className="btn" onClick={onDismiss}>
-            {allSettled ? "close" : "minimize"}
-          </button>
-        </div>
-
-        <div className="shrink-0 border-b border-border px-4 py-3">
-          <div className="h-2 w-full overflow-hidden rounded bg-track">
-            <div
-              className={`h-full rounded transition-[width] duration-300 ${allSettled ? (failed.length ? "bg-danger" : "bg-ok") : "bg-accent"}`}
-              style={{ width: `${Math.round(overall * 100)}%` }}
-            />
-          </div>
-          <span className="mt-1 block text-right font-mono text-[11px] text-muted">
-            {Math.round(overall * 100)}%
+      <div className="flex shrink-0 items-center gap-3 border-b border-border p-4">
+        <JobStateDot state={allSettled ? (failed.length ? "failed" : "done") : "active"} className="size-5" />
+        <div className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">
+            {allSettled ? (failed.length ? "Export finished with errors" : "Export finished") : "Exporting clips"}
+          </span>
+          <span className="block font-mono text-[11px] text-muted">
+            {done.length} done{failed.length > 0 ? ` · ${failed.length} failed` : ""} · {jobs.length} total
           </span>
         </div>
-
-        <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
-          {hasTiers && (
-            <p className="text-[11px] leading-relaxed text-muted">
-              full = full resolution &middot; sharable = size-capped copy (in sharable/)
-            </p>
-          )}
-          {batches.map((batch, i) => (
-            <div key={batch[0].createdAt} className="flex flex-col gap-2.5">
-              {batches.length > 1 && (
-                <span className="label flex items-center gap-2">
-                  batch {i + 1}/{batches.length}
-                  <span className="font-mono text-[10px] font-normal text-muted">
-                    {batchTimeLabel(batch[0].createdAt)}
-                  </span>
-                </span>
-              )}
-              {batch.map((j) => (
-                <JobRow key={j.id} job={j} onCancel={onCancel} />
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {allSettled && done.length > 0 && onClear && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-3">
-            <button className="btn btn-sm" onClick={onClear}>
-              clear finished
-            </button>
-          </div>
-        )}
+        <button ref={closeRef} className="btn" onClick={onDismiss}>
+          {allSettled ? "close" : "minimize"}
+        </button>
       </div>
-    </div>
+
+      <div className="shrink-0 border-b border-border px-4 py-3">
+        <div className="h-2 w-full overflow-hidden rounded bg-track">
+          <div
+            className={`h-full rounded transition-[width] duration-300 ${allSettled ? (failed.length ? "bg-danger" : "bg-ok") : "bg-accent"}`}
+            style={{ width: `${Math.round(overall * 100)}%` }}
+          />
+        </div>
+        <span className="mt-1 block text-right font-mono text-[11px] text-muted">
+          {Math.round(overall * 100)}%
+        </span>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-4">
+        {hasTiers && (
+          <p className="text-[11px] leading-relaxed text-muted">
+            full = full resolution &middot; sharable = size-capped copy (in sharable/)
+          </p>
+        )}
+        {batches.map((batch, i) => (
+          <div key={batch[0].createdAt} className="flex flex-col gap-2.5">
+            {batches.length > 1 && (
+              <span className="label flex items-center gap-2">
+                batch {i + 1}/{batches.length}
+                <span className="font-mono text-[10px] font-normal text-muted">
+                  {batchTimeLabel(batch[0].createdAt)}
+                </span>
+              </span>
+            )}
+            {batch.map((j) => (
+              <JobRow key={j.id} job={j} onCancel={onCancel} />
+            ))}
+          </div>
+        ))}
+      </div>
+
+      {allSettled && done.length > 0 && onClear && (
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-border p-3">
+          <button className="btn btn-sm" onClick={onClear}>
+            clear finished
+          </button>
+        </div>
+      )}
+    </Dialog>
   );
 }

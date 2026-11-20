@@ -11,7 +11,7 @@ import {
   type AvifEncoder,
   type Mp4Encoder,
 } from "./args";
-import { resolveSourceKbit, targetVideoKbit } from "./bitrate";
+import { resolveOutKbit } from "./bitrate";
 import { comboDuration, comboFade, comboTarget } from "./combine";
 import {
   avifEncoder,
@@ -34,7 +34,7 @@ import {
   type LongAxis,
   type Rung,
 } from "./ladder";
-import { clipFileName } from "./names";
+import { clipFileName, highlightsFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
@@ -140,7 +140,8 @@ async function startJob(job: Job) {
   } finally {
     cancelled.delete(job.id);
     handles.delete(job.id);
-    if (job.status !== "error") job.stage = null;
+    // A failed job keeps no stage: the error row only shows the message.
+    job.stage = null;
     store.updateJob(job);
     fs.rmSync(path.join(TMP_DIR, job.id), { recursive: true, force: true });
   }
@@ -247,16 +248,10 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   }
 
   const encoder = await pickEncoder();
-  const srcKbit = resolveSourceKbit({
-    videoKbit: video.videoKbit,
-    formatKbit: video.formatKbit,
-    audioKbit: video.audioKbit,
-  });
-  const kbit =
-    first.quality.mode === "manual" && first.quality.kbit > 0
-      ? Math.round(first.quality.kbit)
-      : targetVideoKbit(srcKbit, video.fps, fps);
-  const outName = clipFileName(job.clipNo, first.note, "mp4");
+  const kbit = resolveOutKbit(video, fps, first.quality);
+  // <note>-highlights.mp4, NOT clipN-...: the parts export individually
+  // alongside this file (part #N would own clipN-<note>.mp4).
+  const outName = highlightsFileName(first.note);
   const outPath = path.join(outDir, outName);
   const concat = () =>
     runTracked(
@@ -292,15 +287,7 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   // first frame is the exact frame a player shows at that sub-second.
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const srcKbit = resolveSourceKbit({
-    videoKbit: video.videoKbit,
-    formatKbit: video.formatKbit,
-    audioKbit: video.audioKbit,
-  });
-  const kbit =
-    clip.quality.mode === "manual" && clip.quality.kbit > 0
-      ? Math.round(clip.quality.kbit)
-      : targetVideoKbit(srcKbit, video.fps, clip.fps);
+  const kbit = resolveOutKbit(video, clip.fps, clip.quality);
   const encoder = await pickEncoder();
   throwIfCancelled(job);
   const outName = clipFileName(job.clipNo, clip.note, "mp4");
@@ -325,6 +312,21 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   if (warn) job.warning = warn;
   job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size });
   store.updateJob(job);
+}
+
+/** Warn (not fail) when a sharable gif/avif's duration misses the
+ * request by more than 1.5 frames at the rung's fps. */
+async function checkSharableDuration(
+  file: string,
+  dur: number,
+  fps: number,
+  job: Job,
+  kind: "gif" | "avif",
+): Promise<void> {
+  const { container } = await streamDurations(file);
+  if (Math.abs(container - dur) > 1.5 / fps) {
+    job.warning = `${kind} sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
+  }
 }
 
 async function checkDurationOrRetry(
@@ -392,10 +394,7 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   fs.renameSync(winner.file, path.join(shareDir, path.basename(shareName)));
 
   job.stage = { id: "gif-verify" };
-  const { container } = await streamDurations(path.join(shareDir, path.basename(shareName)));
-  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
-    job.warning = `gif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
-  }
+  await checkSharableDuration(path.join(shareDir, path.basename(shareName)), dur, winner.rung.fps, job, "gif");
   job.outputs.push(
     { kind: "gif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
     { kind: "gif", name: shareName, size: fs.statSync(path.join(shareDir, path.basename(shareName))).size, tier: "sharable" },
@@ -472,10 +471,7 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   fs.renameSync(winner.file, path.join(shareDir, fullName));
 
   job.stage = { id: "avif-verify" };
-  const { container } = await streamDurations(path.join(shareDir, fullName));
-  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
-    job.warning = `avif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
-  }
+  await checkSharableDuration(path.join(shareDir, fullName), dur, winner.rung.fps, job, "avif");
   job.outputs.push(
     { kind: "avif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
     { kind: "avif", name: `sharable/${fullName}`, size: fs.statSync(path.join(shareDir, fullName)).size, tier: "sharable" },

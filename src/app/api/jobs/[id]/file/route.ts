@@ -3,6 +3,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { findOutput } from "@/lib/jobs";
+import { disposition } from "@/lib/names";
 import { OUT_DIR, store } from "@/lib/store";
 import { dateFromVideoId } from "@/lib/vodDate";
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   return new Response(stream, {
     headers: {
       "content-type": type,
-      "content-disposition": `attachment; filename="${encodeURIComponent(path.basename(out.name))}"`,
+      "content-disposition": disposition(path.basename(out.name)),
       "content-length": String(fs.statSync(file).size),
     },
   });

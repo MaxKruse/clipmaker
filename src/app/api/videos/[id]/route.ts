@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import fs from "node:fs";
+import path from "node:path";
+import { removeThumbsForVideo } from "@/lib/filmstrip";
 import { cancelJob } from "@/lib/runner";
 import { isActiveJob } from "@/lib/jobs";
-import { store } from "@/lib/store";
+import { OUT_DIR, store } from "@/lib/store";
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,5 +18,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   }
   store.removeVideo(id);
   store.removeJobsForVideo(id);
+  // The video's per-id runtime dirs go with it: its export files (which
+  // can be several GB) and its filmstrip cache. The uploads dir is
+  // already handled by removeVideo for uploaded sources.
+  fs.rmSync(path.join(OUT_DIR, id), { recursive: true, force: true });
+  removeThumbsForVideo(id);
   return NextResponse.json({ ok: true });
 }

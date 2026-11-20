@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveSourceKbit, round50k, targetVideoKbit } from "../src/lib/bitrate";
+import { resolveOutKbit, resolveSourceKbit, round50k, targetVideoKbit } from "../src/lib/bitrate";
 
 describe("round50k", () => {
   test("rounds to 50k units", () => {
@@ -49,5 +49,21 @@ describe("resolveSourceKbit", () => {
   test("falls back to 6000k when nothing usable", () => {
     expect(resolveSourceKbit({ videoKbit: null, formatKbit: null, audioKbit: null })).toBe(6000);
     expect(resolveSourceKbit({ videoKbit: null, formatKbit: 100, audioKbit: 128 })).toBe(6000);
+  });
+});
+
+describe("resolveOutKbit", () => {
+  const video = { videoKbit: 5003, formatKbit: null, audioKbit: null, fps: 60 };
+
+  test("source mode: source-scaled, rounded to 50k", () => {
+    expect(resolveOutKbit(video, 30, { mode: "source", kbit: 0 })).toBe(2500);
+  });
+
+  test("manual mode with a kbit wins", () => {
+    expect(resolveOutKbit(video, 30, { mode: "manual", kbit: 4001 })).toBe(4001);
+  });
+
+  test("manual mode without a kbit falls back to the source value", () => {
+    expect(resolveOutKbit(video, 30, { mode: "manual", kbit: 0 })).toBe(2500);
   });
 });

@@ -163,7 +163,7 @@ export function OptionsPanel({
             <label className="flex cursor-pointer items-end gap-2 pb-2 text-sm">
               <input
                 type="checkbox"
-                className="size-4 accent-[#58a6ff]"
+                className="size-4 accent-accent"
                 checked={defaults.audio}
                 onChange={(e) => onDefaultsChange({ ...defaults, audio: e.target.checked })}
               />
@@ -309,7 +309,7 @@ export function OptionsPanel({
             <label className="flex cursor-pointer items-end gap-2 pb-2 text-sm">
               <input
                 type="checkbox"
-                className="size-4 accent-[#58a6ff]"
+                className="size-4 accent-accent"
                 disabled={!video.hasAudio}
                 checked={draft.audio && video.hasAudio}
                 onChange={(e) => onChange({ audio: e.target.checked })}

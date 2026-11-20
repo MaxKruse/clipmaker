@@ -54,7 +54,8 @@ export default function Page() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   // The export plan modal (opened by "Export clips"): the clip list with
-  // checkboxes + the combine toggle, instead of auto-starting the export.
+  // checkboxes + per-group combined-highlights checkboxes, instead of
+  // auto-starting the export.
   const [exportPlan, setExportPlan] = useState(false);
   // What the page-load ingest sweep did (null when it found nothing).
   const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -253,7 +254,13 @@ export default function Page() {
 
   const removeVideo = (id: string) => {
     const v = videos.find((x) => x.id === id);
-    if (v?.uploaded && !confirm(`Delete the uploaded file "${v.name}" from disk?`)) return;
+    if (!v) return;
+    // Every removal deletes the video's export files; uploaded sources
+    // are deleted from disk too, path sources are not.
+    const text = v.uploaded
+      ? `Delete "${v.name}" and its export files from disk?`
+      : `Delete "${v.name}"? Its export files are deleted from disk; the source video is kept.`;
+    if (!confirm(text)) return;
     fetch(`/api/videos/${id}`, { method: "DELETE" }).catch(() => {});
     setClips((all) => {
       const next = { ...all };
@@ -330,6 +337,10 @@ export default function Page() {
   };
 
   const updateDraft = (patch: Partial<ClipSpec>) => {
+    // Setting the times is "setting in/out" like the keyboard I/O and
+    // the timeline handles: it accepts the preview position as the new
+    // one, so "back" cannot restore it afterwards.
+    if (patch.start !== undefined || patch.end !== undefined) dispatch({ type: "set-range" });
     // Guided flow: touching the times finishes the "set the times"
     // step; setting a crop finishes the optional crop step.
     dispatch({ type: "patched", patch });
@@ -473,10 +484,12 @@ export default function Page() {
     }
   };
 
-  // Enqueue the export the plan modal approved: `combine` groups
-  // same-name clips into one job each (a single mp4 "highlights" file,
-  // parts concatenated with fades). Success opens the progress modal.
-  const startExport = async (selected: ClipSpec[], combine: boolean) => {
+  // Enqueue the export the plan modal approved: every selected clip gets
+  // its own job, and each ticked same-name group (2+ selected parts) gets
+  // one additional job (a single mp4 "highlights" file, parts
+  // concatenated with 0.5s fades) on top of its parts. Success opens the
+  // progress modal.
+  const startExport = async (selected: ClipSpec[], combineKeys: string[]) => {
     if (!active) return;
     setExporting(true);
     setExportError(null);
@@ -484,7 +497,11 @@ export default function Page() {
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ videoId: active.id, clips: selected, combine }),
+        body: JSON.stringify({
+          videoId: active.id,
+          clips: selected,
+          ...(combineKeys.length > 0 ? { combine: combineKeys } : {}),
+        }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? res.statusText);
@@ -569,7 +586,10 @@ export default function Page() {
               onTogglePlay={togglePlay}
               onPlayingChange={setPlaying}
               onTime={onTime}
-              onSeek={seek}
+              onSeek={(t) => {
+                dispatch({ type: "cancel-return" });
+                seek(t);
+              }}
               onIn={setIn}
               onOut={setOut}
               onCropChange={(c) => updateDraft({ crop: c })}
@@ -613,7 +633,13 @@ export default function Page() {
               onReset={resetSeam("strip")}
             />
             <div ref={stripWrap} className="min-h-0 min-w-0">
-            <Filmstrip videoId={active.id} onSeek={seek} />
+            <Filmstrip
+              videoId={active.id}
+              onSeek={(t) => {
+                dispatch({ type: "cancel-return" });
+                seek(t);
+              }}
+            />
             </div>
           </div>
           <Resizer
