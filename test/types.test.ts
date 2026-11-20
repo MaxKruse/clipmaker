@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { defaultClip, defaultClipDefaults, toggleFormatIn } from "../src/lib/types";
+import { defaultClip, defaultClipDefaults, defaultsSummary, toggleFormatIn, type Format } from "../src/lib/types";
 
 test("toggleFormatIn: adds an unselected format", () => {
   expect(toggleFormatIn(["mp4"], "gif")).toEqual(["mp4", "gif"]);
@@ -62,4 +62,33 @@ test("defaultClip: mutating the result does not touch the defaults", () => {
   c.anim.maxEdge = 256;
   expect(d.formats).toEqual(["mp4", "avif"]);
   expect(d.anim.maxEdge).toBe(1000);
+});
+
+test("defaultsSummary: the shipped defaults", () => {
+  expect(defaultsSummary(defaultClipDefaults())).toBe(
+    "MP4+AVIF · audio · MP4 60 fps (source) · GIF/AVIF 30 fps (48 MB cap, 1000 px)",
+  );
+});
+
+test("defaultsSummary: manual quality shows the kbit value", () => {
+  const d = { ...defaultClipDefaults(), quality: { mode: "manual" as const, kbit: 2500 } };
+  expect(defaultsSummary(d)).toBe(
+    "MP4+AVIF · audio · MP4 60 fps (2500 kbit) · GIF/AVIF 30 fps (48 MB cap, 1000 px)",
+  );
+});
+
+test("defaultsSummary: audio off", () => {
+  expect(defaultsSummary({ ...defaultClipDefaults(), audio: false })).toContain("no audio");
+});
+
+test("defaultsSummary: omits the MP4 part when mp4 is not a format", () => {
+  const d = { ...defaultClipDefaults(), formats: ["gif"] as Format[] };
+  const s = defaultsSummary(d);
+  expect(s).toBe("GIF · audio · GIF/AVIF 30 fps (48 MB cap, 1000 px)");
+});
+
+test("defaultsSummary: omits the GIF/AVIF part when only mp4 is a format", () => {
+  const d = { ...defaultClipDefaults(), formats: ["mp4"] as Format[] };
+  const s = defaultsSummary(d);
+  expect(s).toBe("MP4 · audio · MP4 60 fps (source)");
 });

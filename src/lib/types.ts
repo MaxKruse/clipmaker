@@ -75,6 +75,25 @@ export function defaultClipDefaults(): ClipDefaults {
   };
 }
 
+/** A compact, human-readable summary of the new-clip defaults: the
+ * settings modal shows it as a live line so what a new clip picks up
+ * reads at a glance. Format list first, then the settings that apply
+ * to the selected formats (no MP4 part without mp4, no GIF/AVIF part
+ * without gif/avif). */
+export function defaultsSummary(d: ClipDefaults): string {
+  const parts = [
+    d.formats.map((f) => f.toUpperCase()).join("+"),
+    d.audio ? "audio" : "no audio",
+  ];
+  if (d.formats.includes("mp4")) {
+    parts.push(`MP4 ${d.fps} fps (${d.quality.mode === "source" ? "source" : `${d.quality.kbit} kbit`})`);
+  }
+  if (d.formats.includes("gif") || d.formats.includes("avif")) {
+    parts.push(`GIF/AVIF ${d.anim.fps} fps (${d.anim.maxMB} MB cap, ${d.anim.maxEdge} px)`);
+  }
+  return parts.join(" · ");
+}
+
 /** One clip: a range of a video plus its export options. */
 export interface ClipSpec {
   id: string;
