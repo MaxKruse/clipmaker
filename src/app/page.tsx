@@ -9,6 +9,7 @@ import { ExportPill } from "@/components/ExportPill";
 import { Filmstrip } from "@/components/Filmstrip";
 import { OptionsPanel } from "@/components/OptionsPanel";
 import { Resizer } from "@/components/Resizer";
+import { SettingsModal } from "@/components/SettingsModal";
 import { Stage } from "@/components/Stage";
 import { Timeline } from "@/components/Timeline";
 import { useExportView } from "@/components/useExportView";
@@ -62,6 +63,9 @@ export default function Page() {
   // The video manager modal (loaded list + add/import) is collapsed behind
   // a single top-bar button so the work area keeps its real estate.
   const [videoModalOpen, setVideoModalOpen] = useState(false);
+  // The settings page (new-clip defaults from .data/defaults.json),
+  // opened from the top-bar button.
+  const [settingsOpen, setSettingsOpen] = useState(false);
   // The work-area layout: right column width plus the stage / filmstrip
   // / options panel heights (null = natural content height). The seams
   // between the regions resize it; persisted to localStorage so the
@@ -550,6 +554,9 @@ export default function Page() {
             {ingestMsg.text}
           </span>
         )}
+        <button className="btn btn-sm ml-auto" onClick={() => setSettingsOpen(true)}>
+          Settings
+        </button>
       </div>
 
       {/* The work area (xl and up) is a resizable grid: the seam
@@ -656,9 +663,7 @@ export default function Page() {
               draft={draft}
               inOut={hasRange ? { start: draft.start, end: draft.end } : null}
               aspect={aspect}
-              defaults={defaults}
               onChange={updateDraft}
-              onDefaultsChange={saveDefaults}
               onAspect={setAspect}
               onClearCrop={() => updateDraft({ crop: null })}
             />
@@ -701,6 +706,13 @@ export default function Page() {
           videoFps={active.fps}
           onClose={() => setExportPlan(false)}
           onStart={startExport}
+        />
+      )}
+      {settingsOpen && (
+        <SettingsModal
+          defaults={defaults}
+          onChange={saveDefaults}
+          onClose={() => setSettingsOpen(false)}
         />
       )}
       {videoModalOpen && (
