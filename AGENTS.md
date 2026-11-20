@@ -347,9 +347,10 @@ Key invariants:
   (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
   UI must reuse those tokens/classes, not redeclare colors.
 - **Player size**: there is no width cap. The Stage is a flex column:
-  a video *area* (16:9 at natural height; `flex-1` in fit mode, see
-  the resizable work area) that holds the video box absolutely
-  inset `3.333%` of the area on every side, then the scrub bar +
+  a video *area* (16:9, width-driven below `xl`; at `xl` and up it
+  fills the stage row, see the resizable work area) that holds the
+  video box absolutely inset `3.333%` of the area on every side, then
+  the scrub bar +
   transport row in a bottom band with the same horizontal margin.
   The video element is `object-contain` in the box; the crop overlay
   tracks any box size via the ResizeObserver.
@@ -432,14 +433,20 @@ Key invariants:
   load gate: it keeps the clip list from showing the previous video's
   clips on a switch and keeps the save effect from writing a record
   that has not been loaded yet (the initial empty one).
-- Layout: the page scrolls at every size (root `min-h-screen`, no
-  fixed viewport height). At `xl` and up the work area is a
-  **resizable grid** (see the next bullet): left column stacks Stage,
-  Timeline, Filmstrip; right column stacks OptionsPanel over ClipQueue,
-  and the grid stretches the right column to the left column's height
-  so ClipQueue fills it and the clip list scrolls inside (the list
-  itself is capped at 420px below `xl` - see the clip list scroll cap
-  bullet above). Below `xl` everything is one column. Export progress
+- Layout: below `xl` the page scrolls (root `min-h-screen`). At `xl`
+  and up the app is **viewport-fitted** (root `xl:h-screen`): the work
+  area is a **resizable grid** (see the next bullet) that fills the
+  viewport, and the stage row stretches to the leftover height, so the
+  whole app scales to the actual screen instead of assuming one monitor
+  size. By default nothing overflows (no page scroll); the root does
+  NOT clip (`overflow-hidden` would cut off pinned panels), so if the
+  user pins a panel past the available space the page scrolls instead
+  of losing regions -
+  left column stacks Stage, Timeline, Filmstrip; right column stacks
+  OptionsPanel over ClipQueue, and ClipQueue fills the right column's
+  leftover with its list scrolling inside (the list itself is capped at
+  420px below `xl` - see the clip list scroll cap bullet above).
+  Export progress
   is not in the layout flow at all: a front-and-center modal
   (ExportModal) with a bottom-right pill (ExportPill) as its minimized
   form; both hide themselves when no job exists.
@@ -453,14 +460,25 @@ Key invariants:
   `LAYOUT_LIMITS` (right 280-800, stage 140-1200, strip 72-320,
   options 96-900). Direction follows the seam: a region above/left of
   its seam (stage, options) grows with the drag, a region below/right
-  of it (filmstrip, right column) shrinks with it. Double-click resets that region to its natural
-  size. The sizes live in `layout` state (a `WorkLayout`:
+  of it (filmstrip, right column) shrinks with it. Double-click resets
+  that region to its default sizing (the stage stretches to the
+  leftover height again; the others return to their default sizes).
+  The sizes live in `layout` state (a `WorkLayout`:
   `right` number, `stage`/`strip`/`options` number-or-null, null =
-  natural height) and feed the grid templates through CSS variables:
+  default sizing) and feed the grid templates through CSS variables:
   outer `xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)]`, left
-  `xl:grid-rows-[var(--lm-stage,auto)_auto_auto_auto_var(--lm-strip,108px)]`,
-  right `xl:grid-rows-[var(--lm-opts,auto)_auto_minmax(0,1fr)]` -
-  unset variables fall back to the old fixed/auto sizes. The layout
+  `xl:grid-rows-[var(--lm-stage,minmax(0,1fr))_auto_auto_auto_var(--lm-strip,108px)]`,
+  right `xl:grid-rows-[var(--lm-opts,minmax(0,auto))_auto_minmax(0,1fr)]`
+  - an unset stage stretches to the leftover viewport height (dynamic
+  scaling), an unset options takes its natural height (its form scrolls
+  internally on short screens); pinning the stage to a px height leaves
+  the leftover space below the filmstrip. Both column divs carry
+  `min-h-0`: they are grid items of the outer grid, and without it
+  their automatic minimum (min-content height) would force the outer
+  implicit row past the viewport - in intrinsic sizing the queue's
+  `1fr` row measures as auto, so a long clip queue would push the whole
+  work area off-screen; with `min-h-0` the queue row shrinks instead
+  and the clip list scrolls inside. The layout
   persists to localStorage (`clipmaker.layout.v1`) on drag end and
   reset via `saveLayout`/`loadLayout` (lib/layout.ts, self-healing on
   corrupt storage). Seams are hidden below `xl`. The seam `Resizer`
@@ -468,11 +486,11 @@ Key invariants:
   the compat mouse events the double-click reset relies on; selection
   is already covered by the body `user-select: none` set during a
   drag. The inert-background click handler ignores `[data-layout]`
-  (seam clicks never leave a clip preview). Resizing the stage row
-  switches the Stage into `fit` mode; the Filmstrip row defaults to
-  108px and its thumbnails scale with the row height; the
-  OptionsPanel scrolls its form when the row is shorter than its
-  natural content.
+  (seam clicks never leave a clip preview). The Stage's video area
+  fills its stage row at `xl` (the video letterboxes inside); the
+  Filmstrip row defaults to 108px and its thumbnails scale with the row
+  height; the OptionsPanel scrolls its form when the row is shorter
+  than its natural content.
 - **Shared dialog chrome**: the three modals (export, videos, export
   plan) render through `Dialog.tsx`, which owns the backdrop click, the
   capture-phase Esc handler (only the topmost open dialog acts on it -
