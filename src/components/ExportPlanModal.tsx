@@ -45,11 +45,12 @@ function CheckBox({ checked }: { checked: boolean }) {
 
 /**
  * The export plan modal: "Export clips" opens this instead of
- * auto-starting the export. A compact card list with one checkbox per
- * clip (all preselected); the "combine" toggle switches on a preview of
- * the highlights files the export WOULD create - one card per same-name
- * group, dimmed while any of its clips is unticked. Combined files are
- * MP4 only, each part with 0.5s fades.
+ * auto-starting the export. Two panes: the clip cards (one checkbox each,
+ * all preselected, unticked cards dimmed) on the left, and the "combined
+ * highlights" preview on the right - always visible, one card per
+ * same-name group with part count and total duration, dimmed while the
+ * combine toggle is off OR any of the group's clips is unticked.
+ * Combined files are MP4 only, each part with 0.5s fades.
  * Follows the VideoModal/ExportModal dialog conventions: capture-phase
  * Esc and a backdrop click close it, focus lands on the close button.
  */
@@ -108,7 +109,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Export clips"
-        className="panel flex max-h-[82vh] w-full max-w-xl flex-col overflow-hidden shadow-2xl"
+        className="panel flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden shadow-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-medium">
@@ -143,47 +144,50 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
             </label>
           </div>
 
-          <div className="space-y-1.5">
-            {clips.map((c, i) => {
-              const on = selected.has(c.id);
-              return (
-                <label
-                  key={c.id}
-                  className={`flex cursor-pointer items-center gap-3 rounded-lg border bg-panel2 px-3 py-2 transition-colors ${
-                    on
-                      ? "border-border hover:border-accent/50"
-                      : "border-border opacity-50 hover:opacity-80"
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    className="peer sr-only"
-                    checked={on}
-                    onChange={() => toggleOne(c.id)}
-                  />
-                  <CheckBox checked={on} />
-                  <span className="w-4 shrink-0 text-right font-mono text-xs text-muted">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {c.note || "unnamed"}
-                  </span>
-                  <span className="shrink-0 font-mono text-xs text-muted">
-                    {formatTime(c.start)} - {formatTime(c.end)}
-                  </span>
-                  {c.crop && <span className="chip shrink-0">crop</span>}
-                  {c.formats.map((f) => (
-                    <span key={f} className="chip shrink-0">
-                      {f}
-                    </span>
-                  ))}
-                </label>
-              );
-            })}
-          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="min-w-0 space-y-2">
+              <span className="label">clips</span>
+              <div className="space-y-1.5">
+                {clips.map((c, i) => {
+                  const on = selected.has(c.id);
+                  return (
+                    <label
+                      key={c.id}
+                      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border bg-panel2 px-3 py-2 transition-colors ${
+                        on
+                          ? "border-border hover:border-accent/50"
+                          : "border-border opacity-50 hover:opacity-80"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="peer sr-only"
+                        checked={on}
+                        onChange={() => toggleOne(c.id)}
+                      />
+                      <CheckBox checked={on} />
+                      <span className="w-4 shrink-0 text-right font-mono text-xs text-muted">
+                        {i + 1}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {c.note || "unnamed"}
+                      </span>
+                      <span className="shrink-0 font-mono text-xs text-muted">
+                        {formatTime(c.start)} - {formatTime(c.end)}
+                      </span>
+                      {c.crop && <span className="chip shrink-0">crop</span>}
+                      {c.formats.map((f) => (
+                        <span key={f} className="chip shrink-0">
+                          {f}
+                        </span>
+                      ))}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
 
-          {combine && (
-            <div className="space-y-1.5">
+            <div className="min-w-0 space-y-2">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="label">combined highlights</span>
                 <span className="text-[11px] text-muted">
@@ -197,11 +201,11 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
               ) : (
                 highlightGroups.map((g) => {
                   const parts = g.filter((c) => selected.has(c.id)).length;
-                  const on = parts === g.length;
+                  const on = combine && parts === g.length;
                   return (
                     <div
                       key={g[0].note}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 transition-opacity ${
+                      className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-opacity ${
                         on
                           ? "border-accent/40 bg-panel2"
                           : "border-border bg-panel opacity-50"
@@ -232,7 +236,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
                 })
               )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="flex shrink-0 items-center justify-between border-t border-border px-4 py-3">

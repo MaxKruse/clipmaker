@@ -418,16 +418,16 @@ Key invariants:
   natural content.
 - **Export plan modal**: the ClipQueue "Export N clips" button does NOT
   start the export - it opens `ExportPlanModal` (`aria-label="Export
-  clips"`): a compact centered card dialog (max-w-xl, not full-screen)
-  with a bordered header, a scrollable body, and a bordered footer.
-  Clips are cards (rounded-lg, custom accent-filled checkbox drawn with
-  CSS - the input stays sr-only; an unticked card is dimmed at
-  opacity-50), plus "select all" and "combine same-name clips"
-  checkboxes. With combine on, a "combined highlights" preview lists
-  the files the export WOULD create: one card per multi-clip same-name
-  group (note, part count, total duration via `comboDuration` +
-  `videoFps`, mp4 chip, "one mp4 per group - 0.5s fade per part" hint);
-  a group card is dimmed while any of its clips is unticked and shows
+  clips"`): a compact centered card dialog (max-w-3xl, not full-screen)
+  with a bordered header, a scrollable two-pane body, and a bordered
+  footer. Left pane "clips": cards (rounded-lg, custom accent-filled
+  checkbox drawn with CSS - the input stays sr-only; an unticked card
+  is dimmed at opacity-50). Right pane "combined highlights": ALWAYS
+  visible (not only with combine on) - one card per multi-clip
+  same-name group (note, part count, total duration via
+  `comboDuration` + `videoFps`, mp4 chip, "one mp4 per group · 0.5s
+  fade per part" hint); a group card is dimmed (opacity-50) while the
+  combine toggle is off OR any of its clips is unticked, and shows
   `parts of N parts` when partial. The footer shows `N clips - M
   exports`, where M = selected count, or `groupCombine(selected).length`
   when combine is on. "Start export" (disabled at 0 selected) calls
