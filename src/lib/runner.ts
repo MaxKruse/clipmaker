@@ -312,6 +312,21 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   store.updateJob(job);
 }
 
+/** Warn (not fail) when a sharable gif/avif's duration misses the
+ * request by more than 1.5 frames at the rung's fps. */
+async function checkSharableDuration(
+  file: string,
+  dur: number,
+  fps: number,
+  job: Job,
+  kind: "gif" | "avif",
+): Promise<void> {
+  const { container } = await streamDurations(file);
+  if (Math.abs(container - dur) > 1.5 / fps) {
+    job.warning = `${kind} sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
+  }
+}
+
 async function checkDurationOrRetry(
   file: string,
   dur: number,
@@ -377,10 +392,7 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   fs.renameSync(winner.file, path.join(shareDir, path.basename(shareName)));
 
   job.stage = { id: "gif-verify" };
-  const { container } = await streamDurations(path.join(shareDir, path.basename(shareName)));
-  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
-    job.warning = `gif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
-  }
+  await checkSharableDuration(path.join(shareDir, path.basename(shareName)), dur, winner.rung.fps, job, "gif");
   job.outputs.push(
     { kind: "gif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
     { kind: "gif", name: shareName, size: fs.statSync(path.join(shareDir, path.basename(shareName))).size, tier: "sharable" },
@@ -457,10 +469,7 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   fs.renameSync(winner.file, path.join(shareDir, fullName));
 
   job.stage = { id: "avif-verify" };
-  const { container } = await streamDurations(path.join(shareDir, fullName));
-  if (Math.abs(container - dur) > 1.5 / winner.rung.fps) {
-    job.warning = `avif sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
-  }
+  await checkSharableDuration(path.join(shareDir, fullName), dur, winner.rung.fps, job, "avif");
   job.outputs.push(
     { kind: "avif", name: fullName, size: fs.statSync(path.join(outDir, fullName)).size, tier: "full" },
     { kind: "avif", name: `sharable/${fullName}`, size: fs.statSync(path.join(shareDir, fullName)).size, tier: "sharable" },
