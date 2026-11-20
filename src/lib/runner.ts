@@ -140,7 +140,8 @@ async function startJob(job: Job) {
   } finally {
     cancelled.delete(job.id);
     handles.delete(job.id);
-    if (job.status !== "error") job.stage = null;
+    // A failed job keeps no stage: the error row only shows the message.
+    job.stage = null;
     store.updateJob(job);
     fs.rmSync(path.join(TMP_DIR, job.id), { recursive: true, force: true });
   }
