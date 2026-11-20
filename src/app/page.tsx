@@ -336,6 +336,10 @@ export default function Page() {
   };
 
   const updateDraft = (patch: Partial<ClipSpec>) => {
+    // Setting the times is "setting in/out" like the keyboard I/O and
+    // the timeline handles: it accepts the preview position as the new
+    // one, so "back" cannot restore it afterwards.
+    if (patch.start !== undefined || patch.end !== undefined) dispatch({ type: "set-range" });
     // Guided flow: touching the times finishes the "set the times"
     // step; setting a crop finishes the optional crop step.
     dispatch({ type: "patched", patch });
@@ -575,7 +579,10 @@ export default function Page() {
               onTogglePlay={togglePlay}
               onPlayingChange={setPlaying}
               onTime={onTime}
-              onSeek={seek}
+              onSeek={(t) => {
+                dispatch({ type: "cancel-return" });
+                seek(t);
+              }}
               onIn={setIn}
               onOut={setOut}
               onCropChange={(c) => updateDraft({ crop: c })}
@@ -619,7 +626,13 @@ export default function Page() {
               onReset={resetSeam("strip")}
             />
             <div ref={stripWrap} className="min-h-0 min-w-0">
-            <Filmstrip videoId={active.id} onSeek={seek} />
+            <Filmstrip
+              videoId={active.id}
+              onSeek={(t) => {
+                dispatch({ type: "cancel-return" });
+                seek(t);
+              }}
+            />
             </div>
           </div>
           <Resizer
