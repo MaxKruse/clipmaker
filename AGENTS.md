@@ -418,11 +418,13 @@ Key invariants:
   natural content.
 - **Export plan modal**: the ClipQueue "Export N clips" button does NOT
   start the export - it opens `ExportPlanModal` (`aria-label="Export
-  clips"`): a compact centered card dialog (max-w-3xl, not full-screen)
+  clips"`): a compact centered card dialog (max-w-4xl, not full-screen)
   with a bordered header, a scrollable two-pane body, and a bordered
   footer. Left pane "clips": cards (rounded-lg, custom accent-filled
   checkbox drawn with CSS - the input stays sr-only; an unticked card
-  is dimmed at opacity-50). Right pane "combined highlights": ALWAYS
+  is dimmed at opacity-50); the time + chips share one wrappable
+  group (min-w-0, `wrap`) so long timestamps with all three formats
+  never overflow the card. Right pane "combined highlights": ALWAYS
   visible (not only with combine on) - one card per multi-clip
   same-name group (note, part count, total duration via
   `comboDuration` + `videoFps`, mp4 chip, "one mp4 per group · 0.5s

@@ -109,7 +109,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
         role="dialog"
         aria-modal="true"
         aria-label="Export clips"
-        className="panel flex max-h-[82vh] w-full max-w-3xl flex-col overflow-hidden shadow-2xl"
+        className="panel flex max-h-[82vh] w-full max-w-4xl flex-col overflow-hidden shadow-2xl"
       >
         <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
           <h2 className="text-sm font-medium">
@@ -172,15 +172,20 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {c.note || "unnamed"}
                       </span>
-                      <span className="shrink-0 font-mono text-xs text-muted">
-                        {formatTime(c.start)} - {formatTime(c.end)}
-                      </span>
-                      {c.crop && <span className="chip shrink-0">crop</span>}
-                      {c.formats.map((f) => (
-                        <span key={f} className="chip shrink-0">
-                          {f}
+                      {/* time + chips share one wrappable group so long
+                          timestamps and all three formats never overflow
+                          the card - chips drop to a second line */}
+                      <span className="flex min-w-0 items-center justify-end gap-x-1.5 gap-y-1 wrap">
+                        <span className="shrink-0 font-mono text-xs text-muted">
+                          {formatTime(c.start)} - {formatTime(c.end)}
                         </span>
-                      ))}
+                        {c.crop && <span className="chip shrink-0">crop</span>}
+                        {c.formats.map((f) => (
+                          <span key={f} className="chip shrink-0">
+                            {f}
+                          </span>
+                        ))}
+                      </span>
                     </label>
                   );
                 })}
@@ -224,7 +229,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
                       <span className="min-w-0 flex-1 truncate text-sm">
                         {g[0].note}
                       </span>
-                      <span className="shrink-0 font-mono text-xs text-muted">
+                      <span className="min-w-0 shrink overflow-hidden font-mono text-xs text-muted [text-overflow:ellipsis] whitespace-nowrap">
                         {on
                           ? `${g.length} part${g.length === 1 ? "" : "s"}`
                           : `${parts} of ${g.length} part${g.length === 1 ? "" : "s"}`}{" "}
