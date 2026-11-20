@@ -31,9 +31,6 @@ interface StageProps {
   onBack: () => void;
   /** Flow step 2: pulse and hint that the optional crop is drawn here. */
   glow?: boolean;
-  /** The panel has a user-set fixed height (layout seam): the video box
-   * fills the leftover height instead of sizing from its 16:9 width. */
-  fit?: boolean;
 }
 
 /** The video player with transport row and the crop overlay. */
@@ -43,7 +40,7 @@ export function Stage(props: StageProps) {
     crop, aspect,
     onTogglePlay, onPlayingChange, onTime, onSeek, onIn, onOut, onCropChange,
     returnTo, onBack,
-    glow, fit,
+    glow,
   } = props;
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
@@ -110,7 +107,7 @@ export function Stage(props: StageProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [fps, videoRef, onTogglePlay, onIn, onOut, onSeek, onBack]);
 
-  // Letterbox: the video frame rect inside the 16:9 stage container.
+  // Letterbox: the video frame rect inside the stage video box.
   const scale = box.w > 0 && box.h > 0 ? Math.min(box.w / srcW, box.h / srcH) : 0;
   const frame = {
     x: (box.w - srcW * scale) / 2,
@@ -122,11 +119,12 @@ export function Stage(props: StageProps) {
   return (
     <div data-player className={`panel relative flex h-full min-h-0 flex-col ${glow ? "attn" : ""}`}>
       {/* The video box fills the stage area with a small margin on
-       * every side (inset of the area). At natural height the area is
-       * 16:9, so the box is 16:9 too; with a user-set panel height
-       * (fit) the area flexes and the video letterboxes inside the
-       * box. */}
-      <div className={fit ? "relative min-h-0 flex-1" : "relative aspect-video w-full"}>
+       * every side (inset of the area). Below xl the area is 16:9
+       * (width-driven); at xl and up the area flexes to fill the
+       * stage row (which stretches to the leftover viewport height by
+       * default, or a user-set seam height) and the video letterboxes
+       * inside the box. */}
+      <div className="relative aspect-video w-full xl:aspect-auto xl:min-h-0 xl:flex-1">
       <div
         ref={boxRef}
         className="absolute inset-[3.333%] overflow-hidden rounded-md bg-black"

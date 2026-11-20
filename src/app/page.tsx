@@ -542,7 +542,7 @@ export default function Page() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col gap-3 p-4">
+    <div className="flex min-h-screen flex-col gap-3 p-4 xl:h-screen">
       <div className="flex flex-wrap items-center gap-3">
         <button className="btn btn-sm min-w-0 max-w-full" onClick={() => setVideoModalOpen(true)}>
           <span className="min-w-0 max-w-[520px] truncate">
@@ -565,7 +565,7 @@ export default function Page() {
           templates through CSS variables (unset = natural/auto). */}
       {active ? (
         <div
-          className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)] xl:gap-0"
+          className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)] xl:gap-0"
           style={
             {
               "--lm-col": `${layout.right}px`,
@@ -575,7 +575,7 @@ export default function Page() {
             } as CSSProperties
           }
         >
-          <div className="flex min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-stage,auto)_auto_auto_auto_var(--lm-strip,108px)] xl:gap-0">
+          <div className="flex min-h-0 min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-stage,minmax(0,1fr))_auto_auto_auto_var(--lm-strip,108px)] xl:gap-0">
             <div ref={stageWrap} className="min-h-0 min-w-0">
             <Stage
               src={`/api/videos/${active.id}/file`}
@@ -603,7 +603,6 @@ export default function Page() {
               returnTo={session.returnTo}
               onBack={leavePreview}
               glow={session.step === "crop"}
-              fit={layout.stage !== null}
             />
             </div>
             <Resizer
@@ -656,7 +655,7 @@ export default function Page() {
             onEnd={() => persistLayout(layout)}
             onReset={resetSeam("right")}
           />
-          <div className="flex min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-opts,auto)_auto_minmax(0,1fr)] xl:gap-0">
+          <div className="flex min-h-0 min-w-0 flex-col gap-3 xl:grid xl:grid-rows-[var(--lm-opts,minmax(0,auto))_auto_minmax(0,1fr)] xl:gap-0">
             <div ref={optsWrap} className="min-h-0 min-w-0">
             <OptionsPanel
               video={active}

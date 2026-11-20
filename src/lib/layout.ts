@@ -1,18 +1,20 @@
 // Resizable work-area layout: the right column's width plus the heights
 // of the three user-resizable panels (stage, filmstrip, options). A null
-// height means "natural content height"; the page measures the panel
-// when a seam drag starts, then clamps every value to LAYOUT_LIMITS.
-// The pure load/save helpers here keep storage access (localStorage) in
-// the page; the tests exercise them with injected read/write functions.
+// height means "default sizing", defined by the page's grid templates
+// (stage: stretches to the leftover viewport height at xl; strip: 108px;
+// options: natural content height); the page measures the panel when a
+// seam drag starts, then clamps every value to LAYOUT_LIMITS. The pure
+// load/save helpers here keep storage access (localStorage) in the page;
+// the tests exercise them with injected read/write functions.
 
 export interface WorkLayout {
   /** Right column (options + clip queue) width in px. */
   right: number;
-  /** Stage (player) panel height in px; null = natural. */
+  /** Stage (player) panel height in px; null = stretch to leftover. */
   stage: number | null;
-  /** Filmstrip panel height in px; null = natural. */
+  /** Filmstrip panel height in px; null = 108px default. */
   strip: number | null;
-  /** Options panel height in px; null = natural. */
+  /** Options panel height in px; null = natural content height. */
   options: number | null;
 }
 
