@@ -44,7 +44,8 @@ src/lib/combine.ts  same-name grouping (groupCombine), combo math (duration,
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
                     combo cut, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
-                    + outputsGone (done job whose output files are deleted)
+src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) -
+                    server-only (node:path); the client imports jobs.ts
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
@@ -507,6 +508,10 @@ Key invariants:
   level comes from `avifDurationLevel` (lib/avif.ts, pure, unit-tested).
 
 ## Gotchas
+- **`jobs.ts` is imported by client components** (page, ExportModal,
+  ExportPill) and must never gain a runtime `node:` import - `next build`
+  fails with `UnhandledSchemeError` (dev mode does not catch it).
+  Server-only job helpers live in `jobFiles.ts`.
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
   transpile. Do not bump it.
 - **Ingest "still writing" has two triggers**: a size change during the
@@ -527,7 +532,7 @@ Key invariants:
 - **The store self-heals stale rows on load, and rewrites the JSON
   files when it drops or migrates anything.** On load: video sessions
   whose source file is gone are dropped, done jobs whose output files
-  were deleted by hand (`outputsGone` in lib/jobs.ts) are dropped, jobs
+  were deleted by hand (`outputsGone` in lib/jobFiles.ts) are dropped, jobs
   whose video no longer exists are dropped, running/queued jobs become
   errored ("server restarted before the job finished"), and clip lists
   for videos that no longer exist are dropped (the orphan case a UI

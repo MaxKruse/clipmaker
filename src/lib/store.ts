@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { toDefaults } from "./clips";
-import { outputsGone, sortJobs } from "./jobs";
+import { sortJobs } from "./jobs";
+import { outputsGone } from "./jobFiles";
 import { defaultClipDefaults, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
