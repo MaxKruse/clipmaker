@@ -44,6 +44,7 @@ src/lib/combine.ts  same-name grouping (groupCombine), combo math (duration,
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
                     combo cut, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
+                    + outputsGone (done job whose output files are deleted)
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
@@ -65,7 +66,8 @@ src/lib/ingest.ts   ingest-folder sweep: pure helpers (shouldIngest,
                     quarantineName, classifyMoveFailure, ingestNotice) plus
                     the single-flight sweepIngest (server-only - the page
                     must never import it, only the videos route may)
-src/lib/store.ts    disk-backed session store (.data/) + dir constants
+src/lib/store.ts    disk-backed session store (.data/) + dir constants;
+                    self-heals stale rows on load (rewrites the JSON files)
 src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job); runCombined is the combined-MP4 pipeline for jobs with job.clips
 src/app/api/**      thin route handlers over store/runner
 src/components/**   UI, all "use client"; useExportView.ts is the thin hook
@@ -237,7 +239,10 @@ Key invariants:
   `{ videos, ingested, rejected, pending, notice }`; `notice` is the
   one-line banner text (contract pinned by `test/ingest.test.ts`), null
   when the sweep found nothing. `DELETE /api/videos/[id]` - remove
-  (deletes the upload dir only when `uploaded`).
+  (deletes the upload dir only when `uploaded`); first cancels the
+  video's queued/running exports (queued settle at once, running are
+  killed and their late settle is a no-op on the gone video), then
+  drops ALL of the video's jobs.
 - `GET /api/videos/[id]/file` - byte-range streaming (206); the `<video>`
   element needs this for seeking.
 - `GET/PUT /api/videos/[id]/clips` - the video's project file: fetch
@@ -519,10 +524,20 @@ Key invariants:
   env vars > PATH > `C:\ProgramData\chocolatey\bin`. The probe is
   spawnSync `-version`, cached in-process; `findBin` must keep working
   when the binary is absent (routes return a clean error, no crash).
-- A server restart marks running/queued jobs as errored ("server
-  restarted before the job finished") - temp files in `.tmp/` of a dead
-  job are orphaned and can be removed. On the same load, legacy
-  jobs.json rows with a string `stage` migrate to null.
+- **The store self-heals stale rows on load, and rewrites the JSON
+  files when it drops or migrates anything.** On load: video sessions
+  whose source file is gone are dropped, done jobs whose output files
+  were deleted by hand (`outputsGone` in lib/jobs.ts) are dropped, jobs
+  whose video no longer exists are dropped, running/queued jobs become
+  errored ("server restarted before the job finished"), and clip lists
+  for videos that no longer exist are dropped (the orphan case a UI
+  video deletion used to leave behind). Each of the three `.data` JSON
+  files is rewritten whenever a row is dropped/migrated, so the disk
+  matches the in-memory sessions. `store.updateJob` no-ops for a job
+  whose video is gone: a running export killed by the video's removal
+  settles asynchronously after `removeVideo`, and must not resurrect
+  the row. Temp files in `.tmp/` of a dead job are orphaned and can be
+  removed; legacy jobs.json rows with a string `stage` migrate to null.
 - The MP4 stage encodes directly into `out/<videoId>/` (not a temp
   file), so a job that is cancelled or errors mid-MP4-encode leaves a
   partial `.mp4` behind in `out/` (it is not in the job's `outputs`).
@@ -541,7 +556,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 229 unit tests over the pure libs (times, bitrate,
+- `bun test` - 235 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   ingest, ffmpeg's once).

@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { toDefaults } from "./clips";
-import { sortJobs } from "./jobs";
+import { outputsGone, sortJobs } from "./jobs";
 import { defaultClipDefaults, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
@@ -69,10 +69,15 @@ class Store {
     } catch {
       return;
     }
+    let dropped = 0;
     for (const v of Object.values(raw)) {
       // Drop sessions whose source file is gone (moved/deleted outside the app).
       if (v && v.id && v.path && fs.existsSync(v.path)) this.videos.set(v.id, v);
+      else dropped++;
     }
+    // Rewrite the file so the disk matches the loaded sessions; without
+    // this, dropped rows stay in videos.json until an unrelated save.
+    if (dropped > 0) this.saveVideos();
   }
 
   private loadJobs() {
@@ -82,7 +87,10 @@ class Store {
     } catch {
       return;
     }
+    let kept = 0;
+    let mutated = false;
     for (const j of raw) {
+      kept++;
       if (!j || !j.id) continue;
       // A job whose video is gone has nothing to download, and an output
       // name that escapes the out dir must never reach the download route.
@@ -92,12 +100,18 @@ class Store {
         j.status = "error";
         j.stage = null;
         j.error = "server restarted before the job finished";
+        mutated = true;
       }
       // Legacy jobs.json rows carry the stage as a free string; the
       // structured JobStage replaced it. The error text keeps the context.
       if (typeof j.stage === "string") j.stage = null;
+      // A done job whose files were deleted (out/ cleaned by hand) would
+      // only offer broken downloads - drop the row.
+      if (outputsGone(j, OUT_DIR, fs.existsSync)) continue;
       this.jobs.set(j.id, j);
     }
+    // Rewrite so dropped rows and status migrations don't linger on disk.
+    if (kept < raw.length || mutated) this.saveJobs();
   }
 
   addVideo(v: VideoInfo) {
@@ -121,7 +135,19 @@ class Store {
   }
 
   updateJob(j: Job) {
+    // A video deleted mid-export settles its jobs after removeVideo has
+    // dropped them - a late update must not resurrect a row whose video
+    // is gone (the download route would 404 on it anyway).
+    if (!this.videos.has(j.videoId)) return;
     this.jobs.set(j.id, j);
+    this.saveJobs();
+  }
+
+  /** Drop every job of a video; called right after removeVideo. */
+  removeJobsForVideo(videoId: string) {
+    for (const [id, j] of this.jobs) {
+      if (j.videoId === videoId) this.jobs.delete(id);
+    }
     this.saveJobs();
   }
 
@@ -154,9 +180,17 @@ class Store {
     } catch {
       return;
     }
+    let dropped = 0;
     for (const [id, list] of Object.entries(raw)) {
-      if (Array.isArray(list)) this.clips.set(id, list.filter((c) => c && typeof c.id === "string"));
+      if (Array.isArray(list) && this.videos.has(id)) {
+        this.clips.set(id, list.filter((c) => c && typeof c.id === "string"));
+      } else {
+        // Orphan: the video no longer exists (removed via the UI, or its
+        // source file was deleted outside the app).
+        dropped++;
+      }
     }
+    if (dropped > 0) this.saveClips();
   }
 
   private saveClips() {
