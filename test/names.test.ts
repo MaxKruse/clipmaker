@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clipFileName, sanitizeNote } from "../src/lib/names";
+import { clipFileName, disposition, sanitizeNote } from "../src/lib/names";
 
 describe("clipFileName", () => {
   test("mp4 without note", () => {
@@ -57,5 +57,31 @@ describe("sanitizeNote code points", () => {
     const out = sanitizeNote(emoji.repeat(65)); // 130 units, 65 points
     expect(out).toBe(emoji.repeat(64));
     expect(out.length).toBe(128);
+  });
+});
+
+describe("disposition", () => {
+  test("ascii name: plain filename and matching extension", () => {
+    expect(disposition("clip1-Cute.mp4")).toBe(
+      `attachment; filename="clip1-Cute.mp4"; filename*=UTF-8''clip1-Cute.mp4`,
+    );
+  });
+
+  test("non-ascii name: ascii fallback plus UTF-8 extension", () => {
+    expect(disposition("clip1-grüße.mp4")).toBe(
+      `attachment; filename="clip1-gre.mp4"; filename*=UTF-8''clip1-gr%C3%BC%C3%9Fe.mp4`,
+    );
+  });
+
+  test("a name with no ascii left falls back to download", () => {
+    expect(disposition("é.mp4")).toBe(
+      `attachment; filename="download"; filename*=UTF-8''%C3%A9.mp4`,
+    );
+  });
+
+  test("quotes never survive the fallback", () => {
+    expect(disposition('a"b.mp4')).toBe(
+      `attachment; filename="ab.mp4"; filename*=UTF-8''a%22b.mp4`,
+    );
   });
 });

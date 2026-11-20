@@ -27,3 +27,18 @@ export function clipFileName(
   const base = t ? `clip${n}-${t}` : `clip${n}`;
   return ext === "gif" && edgePx ? `${base}-${edgePx}.gif` : `${base}.${ext}`;
 }
+
+/**
+ * Content-disposition header for a download. RFC 6266: the plain
+ * `filename=` gets an ASCII-only fallback (non-ASCII dropped, quotes and
+ * backslashes removed, "download" when nothing is left), and the real
+ * name goes into the `filename*=UTF-8''...` extension.
+ */
+export function disposition(name: string): string {
+  let fallback = name
+    .replace(/[^\x21-\x7E]/g, "")
+    .replace(/["\\]/g, "")
+    .trim();
+  if (!fallback || fallback.startsWith(".")) fallback = "download";
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}
