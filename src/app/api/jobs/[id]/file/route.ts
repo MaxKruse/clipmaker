@@ -4,6 +4,7 @@ import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
 import { findOutput } from "@/lib/jobs";
 import { OUT_DIR, store } from "@/lib/store";
+import { dateFromVideoId } from "@/lib/vodDate";
 
 /** Download a finished job's output: ?k=mp4|gif|avif picks the kind, ?t=full|sharable the tier. */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -13,7 +14,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const kind = req.nextUrl.searchParams.get("k");
   const out = findOutput(job.outputs ?? [], kind ?? "", req.nextUrl.searchParams.get("t") ?? undefined);
   if (!out) return NextResponse.json({ error: "no such output" }, { status: 404 });
-  const file = path.join(OUT_DIR, job.videoId, out.name);
+  // out.name is relative to the video's export dir, which for dated
+  // videos sits in a subfolder of just that date.
+  const file = path.join(OUT_DIR, job.videoId, dateFromVideoId(job.videoId) ?? "", out.name);
   if (!fs.existsSync(file)) return NextResponse.json({ error: "file missing on disk" }, { status: 404 });
   const type = out.name.endsWith(".avif")
     ? "image/avif"

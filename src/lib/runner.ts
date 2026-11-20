@@ -38,6 +38,7 @@ import { clipFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
+import { dateFromVideoId } from "./vodDate";
 
 // Bounded pool: up to CONCURRENCY exports run at once. NVENC handles
 // several concurrent GPU encodes, and on a CPU-only box parallel jobs
@@ -164,7 +165,9 @@ async function runJob(job: Job) {
   throwIfCancelled(job);
   const tmp = path.join(TMP_DIR, job.id);
   fs.mkdirSync(tmp, { recursive: true });
-  const outDir = path.join(OUT_DIR, job.videoId);
+  // Dated ids (a broadcast date in the source name) put every export
+  // file in a subfolder of just that date under the video folder.
+  const outDir = path.join(OUT_DIR, job.videoId, dateFromVideoId(job.videoId) ?? "");
   fs.mkdirSync(outDir, { recursive: true });
   if (job.clips && job.clips.length > 1) {
     await runCombined(video, job, tmp, outDir);

@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { probeVideo } from "@/lib/ffmpeg";
 import { ingestNotice, sweepIngest } from "@/lib/ingest";
 import { UPLOADS_DIR, store } from "@/lib/store";
-import { newId, type VideoInfo } from "@/lib/types";
+import { type VideoInfo } from "@/lib/types";
+import { newVideoId } from "@/lib/vodDate";
 
 // Safety valve only; real VODs are loaded by path.
 const MAX_UPLOAD_BYTES = 64 * 1024 * 1024 * 1024;
@@ -15,7 +16,7 @@ async function registerPath(abs: string): Promise<VideoInfo> {
   const info = await probeVideo(abs);
   if (!info.width) throw new Error("no video stream found");
   const v: VideoInfo = {
-    id: newId(),
+    id: newVideoId(path.basename(abs)),
     name: path.basename(abs),
     path: abs,
     uploaded: false,
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
   // Windows reserves these device names with or without an extension: a
   // file named "nul.mp4" is uncreatable and undeletable.
   if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/i.test(name)) name = name.replace(/^[^.]*/, "_");
-    const id = newId();
+    const id = newVideoId(name);
     const dir = path.join(UPLOADS_DIR, id);
     fs.mkdirSync(dir, { recursive: true });
     const dest = path.join(dir, name);

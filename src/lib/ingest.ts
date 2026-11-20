@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { probeVideo, type ProbeResult } from "./ffmpeg";
 import { INGEST_DIR, UPLOADS_DIR, store } from "./store";
-import { newId, type VideoInfo } from "./types";
+import { type VideoInfo } from "./types";
+import { newVideoId } from "./vodDate";
 
 /**
  * Ingest folder sweep: drop a file into INGEST_DIR and the next page load
@@ -135,7 +136,7 @@ async function ingestOne(src: string, name: string, report: IngestReport): Promi
     report.pending.push(name);
     return;
   }
-  const id = newId();
+  const id = newVideoId(name);
   const dir = path.join(UPLOADS_DIR, id);
   fs.mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, name);

@@ -128,7 +128,12 @@ port).
    deletes its temp files) and marks it `cancelled by user`, leaving
    the rest of the batch to finish. Files are also written to
    `out/<video-id>/` on disk, sharable copies in
-   `out/<video-id>/sharable/`. In/out points keep their sub-second
+   `out/<video-id>/sharable/`. When the video's file name carries a
+   broadcast date (e.g. a Twitch download named
+   `twitch_user_2026-11-19 07-03-30_...`), the video id starts with it
+   (`2026-11-19_ab12cd34`) so the folders sort chronologically, and
+   the export files sit in a subfolder of just that date
+   (`out/<video-id>/2026-11-19/`). In/out points keep their sub-second
    precision (shown to the millisecond in the clip list and timeline),
    and the exported clip starts on the exact frame at the in-point.
 
