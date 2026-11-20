@@ -63,6 +63,11 @@ function thumbDir(videoId: string): string {
 function thumbPath(videoId: string, t: number): string {
   return path.join(thumbDir(videoId), `${t}.jpg`);
 }
+
+/** Delete a video's cached filmstrip frames (video removal). */
+export function removeThumbsForVideo(videoId: string): void {
+  fs.rmSync(path.join(THUMBS_DIR, videoId), { recursive: true, force: true });
+}
 /** One fast-seek frame at time t, scaled to a small jpeg. Never rejects. */
 function extractThumb(video: VideoInfo, t: number): Promise<void> {
   const args = [

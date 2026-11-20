@@ -253,7 +253,13 @@ export default function Page() {
 
   const removeVideo = (id: string) => {
     const v = videos.find((x) => x.id === id);
-    if (v?.uploaded && !confirm(`Delete the uploaded file "${v.name}" from disk?`)) return;
+    if (!v) return;
+    // Every removal deletes the video's export files; uploaded sources
+    // are deleted from disk too, path sources are not.
+    const text = v.uploaded
+      ? `Delete "${v.name}" and its export files from disk?`
+      : `Delete "${v.name}"? Its export files are deleted from disk; the source video is kept.`;
+    if (!confirm(text)) return;
     fetch(`/api/videos/${id}`, { method: "DELETE" }).catch(() => {});
     setClips((all) => {
       const next = { ...all };
