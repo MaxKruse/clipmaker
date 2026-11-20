@@ -14,7 +14,8 @@ replace the PNGs, so the examples keep matching the live UI.
 
 A local web app that cuts clips from local videos and exports them as MP4
 and/or GIF and/or animated AVIF (GIF/AVIF in a full tier plus a
-size-capped sharable tier). Next.js 15 App Router, React 19, TypeScript,
+size-capped sharable tier), or combined: clips sharing a note merged
+into ONE MP4 highlights file (mp4 only, 0.5s fades per part). Next.js 15 App Router, React 19, TypeScript,
 Tailwind v4
 (hand-rolled UI components, no component library). All ffmpeg work runs
 server-side via `child_process`; the browser only handles UI, preview
@@ -36,7 +37,10 @@ src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
 src/lib/clips.ts    client-side sanitizers: toClip (untrusted clip -> ClipSpec) and
                     toDefaults (untrusted defaults -> ClipDefaults, field-wise
                     fallback to the shipped defaults)
-src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview)
+src/lib/combine.ts  same-name grouping (groupCombine), combo math (duration,
+                    0.5s fades, target size) for the MP4 highlights combine
+src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
+                    combo cut, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
@@ -60,7 +64,7 @@ src/lib/ingest.ts   ingest-folder sweep: pure helpers (shouldIngest,
                     the single-flight sweepIngest (server-only - the page
                     must never import it, only the videos route may)
 src/lib/store.ts    disk-backed session store (.data/) + dir constants
-src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job)
+src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job); runCombined is the combined-MP4 pipeline for jobs with job.clips
 src/app/api/**      thin route handlers over store/runner
 src/components/**   UI, all "use client"; useExportView.ts is the thin hook
                     around the exportView reducer
@@ -114,8 +118,12 @@ Key invariants:
   the Defaults toggle in the OptionsPanel, persisted in
   `.data/defaults.json`, validated by `toDefaults` (lib/clips.ts).
   Existing clips keep their own settings.
-- `Job { id, videoId, videoName, clip, clipNo, status, stage, pct,
-  outputs, warning?, error?, createdAt }` - `status` is queued/running/
+- `Job { id, videoId, videoName, clip, clipNo, clips?, status, stage,
+  pct, outputs, warning?, error?, createdAt }` - `clips` (present only
+  on combined jobs) is the same-name group; the job produces ONE mp4
+  highlights file, `clip`/`clipNo` = the group's first member (with
+  `formats` forced to `["mp4"]` for display). `status` is
+  queued/running/
   done/error. `stage` is the structured `JobStage` (stages.ts) while
   running, null when settled; the modal renders it via `stageText`.
   `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
@@ -175,12 +183,30 @@ Key invariants:
     emergency 0.1875-edge rung at the stepped fps is tried last; if it
     still exceeds the cap the job fails.
   - **AVIF**: full tier = one crf30 encode at full size, no cap;
-    sharable tier = the 3-axis ladder: the same 12-rung edge x fps
+    sharable tier = the same 12-rung edge x fps
     ping-pong grid as the GIF, repeated per CRF step (25, 29, 33, 36 -
     CRF only changes after the whole grid is exhausted, 48 rungs),
     first file <= maxMB wins; an emergency maxEdge@anim.fps@crf40 rung
     is tried last; if it still exceeds the cap the job fails. Duration
     verify uses the winning rung's fps.
+- **Combined MP4 (highlights)** (MP4 ONLY - a same-name group is ONE
+  job producing ONE mp4 file, never gif/avif): per part (stage
+  `combo-cut: part i/n`) a segment `tmp/seg-i.mp4` is cut at the part's
+  floored frame with `buildComboCutArgs`: crop (if any) then
+  scale/pad to the group's target size (`comboTarget` = first clip's
+  crop-or-source size, so every part is the same size), `fps=N`,
+  `fade=in`/`fade=out` over `comboFade(dur) = min(0.5s, dur/2)`,
+  `setpts=PTS-STARTPTS`, libx264 ultrafast crf14 (the segments need to
+  concat frame-accurate). Audio is per part: source audio with matching
+  `afade` in/out (48kHz AAC), a silent `anullsrc` track when the part
+  mutes audio, or none at all when the whole group has no audio. Then
+  `buildConcatArgs` demuxer-concats the segments (a `concat.txt` list
+  of `file '...'` lines) into the final mp4 with the normal mp4 video
+  encoder (nvenc when available, else x264 slow) at the group's fps and
+  quality (first clip's), `+faststart`; the final encode is
+  duration-verified against `comboDuration` (sum of per-part durations)
+  with one retry (stage `mp4-encode`). Output file: `clipN-note.mp4`
+  where N = the group's first clip number.
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -204,7 +230,10 @@ Key invariants:
   the persisted clip list, or replace it (every clip validated through
   `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
   GET re-runs stored rows through `toClip`, so legacy shapes (the old
-  `gif` key) self-migrate to `anim` on read.
+  `gif` key) self-migrate to `anim` on read. PUT also mirrors the list
+  to `out/<videoId>/timestamps.txt` (one `<start> - <end> <note>` line
+  per clip via `timestampsForVideo`) - best-effort: an empty list
+  deletes the file, and a failed write never fails the save.
 - `GET/PUT /api/defaults` - the new-clip defaults: GET returns the
   `ClipDefaults` object directly; PUT sanitizes the body through
   `toDefaults`, persists it to `.data/defaults.json`, and returns
@@ -212,9 +241,14 @@ Key invariants:
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
   <=480px; `time` is floored to the frame grid, the same frame the
   export will cut at.
-- `POST /api/export` - `{videoId, clips}` - validates each clip server-
-  side (end clamped to duration+0.5, min 0.2s), enqueues one job per
-  clip (`clipNo` = 1-based index).
+- `POST /api/export` - `{videoId, clips, combine?}` - validates each
+  clip server-side (end clamped to duration+0.5, min 0.2s). Without
+  `combine`: one job per clip (`clipNo` = 1-based index). With
+  `combine: true`: clips are grouped by note (trimmed, case-insensitive;
+  empty note = never grouped, `groupCombine` in lib/combine.ts) and each
+  group becomes ONE job carrying `clips` - a combined MP4 highlights
+  export (see the recipe below); `clipNo` = index of the group's first
+  clip.
 - `GET /api/jobs` (newest batch first, clip order within a batch),
   `DELETE /api/jobs` (clear finished),
   `DELETE /api/jobs/[id]` - cancel one queued/running job: sets the
@@ -309,13 +343,15 @@ Key invariants:
   name is imported (`sectionForVideo`), otherwise the UI errors instead
   of importing the wrong VOD's clips. Imported clips are clamped to the
   video duration in `page.tsx:importClips`.
-- **clips.txt export**: the ClipQueue footer button (next to Export)
-  downloads the active video's clips as `<video basename>.clips.txt`
-  (client-side Blob, no server round trip). The text is built by
-  `clipsTxtForVideo` (clipsTxt.ts): a `# <video name>` header plus one
-  `<start> - <end> <note?>` line per clip, times via `formatClipTime`
-  (sub-second precision, trailing zeros trimmed, parseTime-compatible),
-  notes flattened to one line. Disabled while the queue is empty.
+- **timestamps.txt auto-save**: there is no export button for it - the
+  clips PUT route (the debounced clip save) writes
+  `out/<videoId>/timestamps.txt` on every save: one
+  `<start> - <end> <note?>` line per clip, via `timestampsForVideo`
+  (clipsTxt.ts; times through `formatClipTime`, notes flattened to one
+  line). Empty list deletes the file; a failed write never fails the
+  save. `clipsTxtForVideo` is the same serializer with a
+  `# <video name>` header, pinned by the parse/serialize round-trip
+  test - it has no UI caller.
 - **Clip preview jump**: clicking a clip in the queue seeks the player to
   the clip's start and stores the pre-jump position (`session.returnTo`
   in the clip session, kept across consecutive clip clicks). The timeline also
@@ -380,6 +416,18 @@ Key invariants:
   108px and its thumbnails scale with the row height; the
   OptionsPanel scrolls its form when the row is shorter than its
   natural content.
+- **Export plan modal**: the ClipQueue "Export N clips" button does NOT
+  start the export - it opens `ExportPlanModal` (a near-fullscreen
+  dialog, `aria-label="Export clips"`). Every clip is a checked row
+  (select-all checkbox), plus a "combine same-name clips" toggle with
+  the hint "combined clips export as one mp4 (no gif/avif)". The footer
+  shows `N clips - M exports`, where M = selected count, or
+  `groupCombine(selected).length` when combine is on. "Start export"
+  (disabled at 0 selected) calls `startExport(selected, combine)` in
+  page.tsx, which POSTs `/api/export` with the ticked clips +
+  `combine`, then closes the plan and opens the export view. Like the
+  export modal it captures Esc/backdrop so they do not leak to the
+  clip preview underneath.
 - **Export modal**: the view is the `exportView` reducer (modal |
   pill; with no jobs nothing renders). It opens on export and
   auto-opens on an inactive->active jobs transition (covers page
@@ -469,10 +517,10 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 204 unit tests over the pure libs (times, bitrate,
-  avif, ladder, names, crop, args, clipsTxt, clips, types, jobs,
-  stages, exportView, clipSession, layout, filmstrip, ingest, ffmpeg's
-  once).
+- `bun test` - 217 unit tests over the pure libs (times, bitrate,
+  avif, ladder, names, crop, combine, args, clipsTxt, clips, types,
+  jobs, stages, exportView, clipSession, layout, filmstrip, ingest,
+  ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
