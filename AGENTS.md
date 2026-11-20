@@ -10,6 +10,15 @@ change alters the rendered interface (layout, components, labels,
 colors), reshoot all four screenshots with the same cat video and
 replace the PNGs, so the examples keep matching the live UI.
 
+**The example video lives in `docs/example/cat-lapping.webm`**
+(gitignored, 1280x720, 23.7s, ~10.4 MB) and is ALWAYS reused for
+reshoots - register it by path (`POST /api/videos`), remove it
+(`DELETE /api/videos/<id>`) when done. Never store scratch copies in
+`.tmp/`: the store's `sweepTmp` wipes everything under it on every
+server init (an HMR module reload counts). If the file is missing,
+restore it with:
+`curl -sL -A "clipmaker-docs/1.0" -o docs/example/cat-lapping.webm "https://web.archive.org/web/20181001004442id_/https://upload.wikimedia.org/wikipedia/commons/a/ac/Cat_lapping_water_off_ground_in_slow_motion.gk.webm"`
+
 ## What it is
 
 A local web app that cuts clips from local videos and exports them as MP4
@@ -179,6 +188,9 @@ Key invariants:
   `timestamps.txt` (clips mirror) always sits at the video root.
 - `thumbs/<videoId>/` - filmstrip JPEG frame cache, regenerated on
   demand, deleted with the video.
+- `docs/example/cat-lapping.webm` - the README screenshot example
+  video (see the reshoot rules at the top); restore from the Wayback
+  URL if missing.
 - `.tmp/<jobId>/` - per-job temp files, deleted in a `finally`.
 
 ## Export recipes (ported from the clipmaker skill)

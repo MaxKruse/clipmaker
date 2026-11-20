@@ -5,6 +5,7 @@ uploads/
 ingest/
 .tmp/
 thumbs/
+docs/example/
 *.log
 next-env.d.ts
 .data/
