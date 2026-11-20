@@ -34,7 +34,7 @@ import {
   type LongAxis,
   type Rung,
 } from "./ladder";
-import { clipFileName } from "./names";
+import { clipFileName, highlightsFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
@@ -249,7 +249,9 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
 
   const encoder = await pickEncoder();
   const kbit = resolveOutKbit(video, fps, first.quality);
-  const outName = clipFileName(job.clipNo, first.note, "mp4");
+  // <note>-highlights.mp4, NOT clipN-...: the parts export individually
+  // alongside this file (part #N would own clipN-<note>.mp4).
+  const outName = highlightsFileName(first.note);
   const outPath = path.join(outDir, outName);
   const concat = () =>
     runTracked(

@@ -54,7 +54,8 @@ export default function Page() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   // The export plan modal (opened by "Export clips"): the clip list with
-  // checkboxes + the combine toggle, instead of auto-starting the export.
+  // checkboxes + per-group combined-highlights checkboxes, instead of
+  // auto-starting the export.
   const [exportPlan, setExportPlan] = useState(false);
   // What the page-load ingest sweep did (null when it found nothing).
   const [ingestMsg, setIngestMsg] = useState<{ text: string; ok: boolean } | null>(null);
@@ -483,10 +484,12 @@ export default function Page() {
     }
   };
 
-  // Enqueue the export the plan modal approved: `combine` groups
-  // same-name clips into one job each (a single mp4 "highlights" file,
-  // parts concatenated with fades). Success opens the progress modal.
-  const startExport = async (selected: ClipSpec[], combine: boolean) => {
+  // Enqueue the export the plan modal approved: every selected clip gets
+  // its own job, and each ticked same-name group (2+ selected parts) gets
+  // one additional job (a single mp4 "highlights" file, parts
+  // concatenated with 0.5s fades) on top of its parts. Success opens the
+  // progress modal.
+  const startExport = async (selected: ClipSpec[], combineKeys: string[]) => {
     if (!active) return;
     setExporting(true);
     setExportError(null);
@@ -494,7 +497,11 @@ export default function Page() {
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ videoId: active.id, clips: selected, combine }),
+        body: JSON.stringify({
+          videoId: active.id,
+          clips: selected,
+          ...(combineKeys.length > 0 ? { combine: combineKeys } : {}),
+        }),
       });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error ?? res.statusText);

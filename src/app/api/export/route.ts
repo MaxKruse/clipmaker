@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { toClip } from "@/lib/clips";
-import { groupCombine } from "@/lib/combine";
+import { combineKey, groupCombine } from "@/lib/combine";
 import { enqueue } from "@/lib/runner";
 import { store } from "@/lib/store";
 import { newId, type ClipSpec, type Job } from "@/lib/types";
@@ -10,7 +10,9 @@ export async function POST(req: NextRequest) {
     const body = (await req.json()) as {
       videoId?: string;
       clips?: unknown[];
-      combine?: boolean;
+      /** Note keys (trimmed + lowercased) of the groups that get a
+       * combined mp4 highlights job, in addition to their parts. */
+      combine?: unknown;
     };
     const v = store.videos.get(body.videoId ?? "");
     if (!v) return NextResponse.json({ error: "unknown video" }, { status: 404 });
@@ -32,12 +34,40 @@ export async function POST(req: NextRequest) {
     // One timestamp per request: a batch stays tied together so the
     // export list renders it in clip order (stable sort on ties).
     const batch = Date.now();
-    // "combine" groups same-name clips: each group of 2+ becomes ONE
-    // job producing a single mp4 "highlights" file (parts concatenated
-    // with fades); singletons export solo, exactly as without combine.
-    const groups = body.combine === true ? groupCombine(clips) : clips.map((c) => [c]);
     const ids: string[] = [];
-    for (const group of groups) {
+
+    // Every selected clip gets its own job. A combined highlights file
+    // is an ADDITION to its parts, never a replacement: the parts are
+    // the individual exports the user ticked in the plan modal.
+    for (let i = 0; i < clips.length; i++) {
+      const job: Job = {
+        id: newId(),
+        videoId: v.id,
+        videoName: v.name,
+        clip: clips[i],
+        clipNo: i + 1,
+        status: "queued" as const,
+        stage: null,
+        pct: 0,
+        outputs: [],
+        createdAt: batch,
+      };
+      ids.push(job.id);
+      enqueue(job);
+    }
+
+    // "combine" carries the note keys of the groups that get ONE
+    // additional combined job (parts concatenated with 0.5s fades into a
+    // single mp4 "highlights" file). A group needs 2+ parts - a
+    // requested singleton is already covered by its solo job above.
+    const combineKeys = new Set(
+      Array.isArray(body.combine)
+        ? body.combine.map((k) => combineKey(String(k))).filter((k) => k !== "")
+        : [],
+    );
+    for (const group of combineKeys.size > 0 ? groupCombine(clips) : []) {
+      if (group.length < 2) continue;
+      if (!combineKeys.has(combineKey(group[0].note))) continue;
       const first = group[0];
       const job: Job = {
         id: newId(),
@@ -45,9 +75,9 @@ export async function POST(req: NextRequest) {
         videoName: v.name,
         // A combined job produces the single mp4 highlights file, so its
         // representative clip (display + naming) is mp4-only.
-        clip: group.length > 1 ? { ...first, formats: ["mp4"] } : first,
+        clip: { ...first, formats: ["mp4"] },
         clipNo: clips.indexOf(first) + 1,
-        ...(group.length > 1 ? { clips: group } : {}),
+        clips: group,
         status: "queued" as const,
         stage: null,
         pct: 0,

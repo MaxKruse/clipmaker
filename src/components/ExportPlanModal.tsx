@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Dialog } from "@/components/Dialog";
-import { comboDuration, groupCombine } from "@/lib/combine";
+import { combineKey, comboDuration, groupCombine } from "@/lib/combine";
 import { formatClipTime, formatTime } from "@/lib/times";
 import type { ClipSpec } from "@/lib/types";
 
@@ -11,8 +11,10 @@ interface Props {
   /** Source fps - the preview uses it to compute combined durations. */
   videoFps: number;
   onClose: () => void;
-  /** Start the export with the selected clips (list order = part order). */
-  onStart: (clips: ClipSpec[], combine: boolean) => void;
+  /** Start the export: the selected clips (list order = part order) plus
+   * the note keys of the ticked groups that get a combined highlights
+   * mp4 IN ADDITION to their parts. */
+  onStart: (clips: ClipSpec[], combineKeys: string[]) => void;
 }
 
 /**
@@ -46,25 +48,36 @@ function CheckBox({ checked }: { checked: boolean }) {
 
 /**
  * The export plan modal: "Export clips" opens this instead of
- * auto-starting the export. Two panes: the clip cards (one checkbox each,
- * all preselected, unticked cards dimmed) on the left, and the "combined
- * highlights" preview on the right - always visible, one card per
- * same-name group with part count and total duration, dimmed while the
- * combine toggle is off OR any of the group's clips is unticked.
- * Combined files are MP4 only, each part with 0.5s fades.
+ * auto-starting the export. Two panes: the clip cards (one checkbox
+ * each, all preselected, unticked cards dimmed) on the left, and the
+ * "combined highlights" picker on the right - one checkbox per
+ * same-name group (2+ clips). A ticked group adds ONE mp4 highlights
+ * file (its SELECTED parts, 0.5s fades each) on top of the individual
+ * exports: the parts are never replaced by the combined file. A group
+ * only produces a combined file while 2+ of its clips stay selected.
  */
 export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(clips.map((c) => c.id)),
   );
-  const [combine, setCombine] = useState(false);
+  // Note keys (combineKey) of the groups ticked for a combined mp4.
+  const [combined, setCombined] = useState<Set<string>>(() => new Set());
   const closeRef = useRef<HTMLButtonElement | null>(null);
 
   const selectedClips = clips.filter((c) => selected.has(c.id));
   const allSelected = selectedClips.length === clips.length;
-  const jobCount = combine ? groupCombine(selectedClips).length : selectedClips.length;
-  // Multi-clip same-name groups: what a combined export would build.
+  // Multi-clip same-name groups: the combined-export candidates.
   const highlightGroups = groupCombine(clips).filter((g) => g.length > 1);
+  const groupKey = (g: ClipSpec[]) => combineKey(g[0].note);
+  const selectedParts = (g: ClipSpec[]) => g.filter((c) => selected.has(c.id));
+  // Ticked groups that actually produce a combined job (2+ selected parts).
+  const combinedJobCount = highlightGroups.filter(
+    (g) => combined.has(groupKey(g)) && selectedParts(g).length >= 2,
+  ).length;
+  // Combined files ADD to the individual exports, never replace them.
+  const jobCount = selectedClips.length + combinedJobCount;
+  const allCombined =
+    highlightGroups.length > 0 && highlightGroups.every((g) => combined.has(groupKey(g)));
 
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(clips.map((c) => c.id)));
@@ -75,6 +88,15 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
       else next.add(id);
       return next;
     });
+  const toggleGroup = (key: string) =>
+    setCombined((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  const toggleAllGroups = () =>
+    setCombined(allCombined ? new Set() : new Set(highlightGroups.map(groupKey)));
 
   return (
     <Dialog
@@ -105,16 +127,18 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
             <CheckBox checked={allSelected} />
             select all
           </label>
-          <label className="flex cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="peer sr-only"
-              checked={combine}
-              onChange={(e) => setCombine(e.target.checked)}
-            />
-            <CheckBox checked={combine} />
-            combine same-name clips
-          </label>
+          {highlightGroups.length > 0 && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={allCombined}
+                onChange={toggleAllGroups}
+              />
+              <CheckBox checked={allCombined} />
+              combine all groups
+            </label>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4">
@@ -169,7 +193,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
             <div className="flex items-baseline justify-between gap-2">
               <span className="label">combined highlights</span>
               <span className="text-[11px] text-muted">
-                one mp4 per group · 0.5s fade per part
+                parts export individually too · 0.5s fade per part
               </span>
             </div>
             {highlightGroups.length === 0 ? (
@@ -178,38 +202,44 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
               </p>
             ) : (
               highlightGroups.map((g) => {
-                const parts = g.filter((c) => selected.has(c.id)).length;
-                const on = combine && parts === g.length;
+                const key = groupKey(g);
+                const parts = selectedParts(g);
+                const ticked = combined.has(key);
+                const active = ticked && parts.length >= 2;
+                const dur = ticked
+                  ? comboDuration(parts, videoFps)
+                  : comboDuration(g, videoFps);
+                const text = !ticked
+                  ? `${g.length} parts · ${formatClipTime(dur)}s`
+                  : parts.length < 2
+                    ? `${parts.length} of ${g.length} parts - select 2+ to combine`
+                    : `${parts.length === g.length ? g.length : `${parts.length} of ${g.length}`} parts · ${formatClipTime(dur)}s`;
                 return (
-                  <div
-                    key={g[0].note}
-                    className={`flex items-center gap-2.5 rounded-lg border px-3 py-2 transition-opacity ${
-                      on
+                  <label
+                    key={key}
+                    className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2 transition-opacity ${
+                      active
                         ? "border-accent/40 bg-panel2"
-                        : "border-border bg-panel opacity-50"
+                        : ticked
+                          ? "border-border bg-panel2 opacity-70"
+                          : "border-border bg-panel opacity-50"
                     }`}
                   >
-                    <span
-                      aria-hidden
-                      className={`grid size-5 shrink-0 place-items-center rounded-md ${
-                        on ? "bg-accent/15 text-accent" : "bg-panel2 text-muted"
-                      }`}
-                    >
-                      <svg viewBox="0 0 12 12" className="size-3" fill="currentColor">
-                        <path d="M3 2l7 4-7 4z" />
-                      </svg>
-                    </span>
+                    <input
+                      type="checkbox"
+                      className="peer sr-only"
+                      checked={ticked}
+                      onChange={() => toggleGroup(key)}
+                    />
+                    <CheckBox checked={ticked} />
                     <span className="min-w-0 flex-1 truncate text-sm">
                       {g[0].note}
                     </span>
                     <span className="min-w-0 shrink overflow-hidden font-mono text-xs text-muted [text-overflow:ellipsis] whitespace-nowrap">
-                      {on
-                        ? `${g.length} part${g.length === 1 ? "" : "s"}`
-                        : `${parts} of ${g.length} part${g.length === 1 ? "" : "s"}`}{" "}
-                      · {formatClipTime(comboDuration(g, videoFps))}s
+                      {text}
                     </span>
                     <span className="chip shrink-0">mp4</span>
-                  </div>
+                  </label>
                 );
               })
             )}
@@ -225,7 +255,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
         <button
           className="btn btn-primary"
           disabled={selectedClips.length === 0}
-          onClick={() => onStart(selectedClips, combine)}
+          onClick={() => onStart(selectedClips, [...combined])}
         >
           Start export
         </button>

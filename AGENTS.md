@@ -29,7 +29,8 @@ The code is layered so that everything testable is pure:
 src/lib/times.ts    time parsing/formatting + frameAt + formatClipTime + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit + resolveOutKbit (manual vs source)
 src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf) + sharableCap (maxEdge vs the full tier's longest edge, and the scale axis)
-src/lib/names.ts    safe output file names (clip1-note.mp4, ...) + RFC 6266 disposition for downloads
+src/lib/names.ts    safe output file names (clip1-note.mp4, highlightsFileName for
+                    combined <note>-highlights.mp4) + RFC 6266 disposition for downloads
 src/lib/vodDate.ts  broadcast date in a VOD file name -> dated video id
                     (<date>_<random> via newVideoId) + dateFromVideoId (id -> date)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
@@ -219,7 +220,9 @@ Key invariants:
     is tried last; if it still exceeds the cap the job fails. Duration
     verify uses the winning rung's fps.
 - **Combined MP4 (highlights)** (MP4 ONLY - a same-name group is ONE
-  job producing ONE mp4 file, never gif/avif): per part (stage
+  job producing ONE mp4 file, never gif/avif; this job is IN ADDITION
+  to the parts' individual exports, which the export route always
+  enqueues): per part (stage
   `combo-cut: part i/n`) a segment `tmp/seg-i.mp4` is cut at the part's
   floored frame with `buildComboCutArgs`: crop (if any) then
   scale/pad to the group's target size (`comboTarget` = first clip's
@@ -234,8 +237,10 @@ Key invariants:
   encoder (nvenc when available, else x264 slow) at the group's fps and
   quality (first clip's), `+faststart`; the final encode is
   duration-verified against `comboDuration` (sum of per-part durations)
-  with one retry (stage `mp4-encode`). Output file: `clipN-note.mp4`
-  where N = the group's first clip number.
+  with one retry (stage `mp4-encode`). Output file:
+  `<note>-highlights.mp4` (`highlightsFileName` in names.ts) - never a
+  `clipN-` name, so it can never collide with a part's own mp4
+  (part #N owns `clipN-note.mp4` and exports alongside it).
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -275,13 +280,15 @@ Key invariants:
   <=480px; `time` is floored to the frame grid, the same frame the
   export will cut at.
 - `POST /api/export` - `{videoId, clips, combine?}` - validates each
-  clip server-side (end clamped to duration+0.5, min 0.2s). Without
-  `combine`: one job per clip (`clipNo` = 1-based index). With
-  `combine: true`: clips are grouped by note (trimmed, case-insensitive;
-  empty note = never grouped, `groupCombine` in lib/combine.ts) and each
-  group becomes ONE job carrying `clips` - a combined MP4 highlights
-  export (see the recipe below); `clipNo` = index of the group's first
-  clip.
+  clip server-side (end clamped to duration+0.5, min 0.2s). EVERY
+  clip always gets its own job (`clipNo` = 1-based index).
+  `combine` (optional) is an ARRAY of note keys (canonical form:
+  trimmed + lowercased, `combineKey` in lib/combine.ts): for each
+  key, the same-note group (empty note = never grouped) with 2+
+  parts gets ONE ADDITIONAL job carrying `clips` - a combined MP4
+  highlights export (see the recipe below); `clipNo` = index of the
+  group's first clip. Requested singletons are skipped - their solo
+  job above already covers them.
 - `GET /api/jobs` (newest batch first, clip order within a batch),
   `DELETE /api/jobs` (clear finished),
   `DELETE /api/jobs/[id]` - cancel one queued/running job: sets the
@@ -467,18 +474,26 @@ Key invariants:
   is dimmed at opacity-50); the time + chips share one wrappable
   group (min-w-0, `wrap`) so long timestamps with all three formats
   never overflow the card. Right pane "combined highlights": ALWAYS
-  visible (not only with combine on) - one card per multi-clip
-  same-name group (note, part count, total duration via
-  `comboDuration` + `videoFps`, mp4 chip, "one mp4 per group · 0.5s
-  fade per part" hint); a group card is dimmed (opacity-50) while the
-  combine toggle is off OR any of its clips is unticked, and shows
-  `parts of N parts` when partial. The footer shows `N clips - M
-  exports`, where M = selected count, or `groupCombine(selected).length`
-  when combine is on. "Start export" (disabled at 0 selected) calls
-  `startExport(selected, combine)` in page.tsx, which POSTs
-  `/api/export` with the ticked clips + `combine`, then closes the plan
-  and opens the export view. Like the export modal it captures
-  Esc/backdrop so they do not leak to the clip preview underneath.
+  visible - one REAL checkbox card per multi-clip same-name group
+  (note, part count + duration via `comboDuration` + `videoFps`, mp4
+  chip, "parts export individually too · 0.5s fade per part" hint).
+  Combined files are ADDITIONS to the parts, never replacements: a
+  ticked group exports ONE mp4 highlights file of its SELECTED
+  (left-pane-ticked) parts. Card states: unticked = dimmed
+  (opacity-50, shows the group's full part count); ticked with 2+
+  selected parts = active (accent border, shows the selected part
+  count + their duration, `parts of N parts` when partial); ticked
+  with 0-1 selected parts = dimmed (opacity-70, "select 2+ to
+  combine"). The header row has "select all" (clips) plus a
+  "combine all groups" checkbox, rendered only when at least one
+  group exists. The footer shows `N clips - M exports`, where M =
+  selected clip count + ticked groups with 2+ selected parts.
+  "Start export" (disabled at 0 selected) calls
+  `startExport(selected, combineKeys)` in page.tsx, which POSTs
+  `/api/export` with the ticked clips + `combine` = the note keys of
+  the ticked groups, then closes the plan and opens the export view.
+  Like the export modal it captures Esc/backdrop so they do not leak
+  to the clip preview underneath.
 - **Export modal**: the view is the `exportView` reducer (modal |
   pill; with no jobs nothing renders). It opens on export and
   auto-opens on an inactive->active jobs transition (covers page
@@ -582,7 +597,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 245 unit tests over the pure libs (times, bitrate,
+- `bun test` - 248 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, ffmpeg's once).

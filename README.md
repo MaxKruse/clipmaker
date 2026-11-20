@@ -108,16 +108,18 @@ port).
    and export them all at once.
 6. **Export** - clicking "Export" first opens an export plan: your
    clips as a card list with a checkbox each (all ticked by default), a
-   select-all, and a **"combine same-name clips"** toggle - alongside a
-   "combined highlights" preview of the files the export would create
-   (one card per same-name group with part count and total length),
-   dimmed while the toggle is off or a group's clips are unticked.
-   Combining merges every group of clips that share the same note into
-   ONE MP4 "highlights" file per group - each part fades in and out
-   over 0.5 seconds - and combined clips are exported as MP4 only (no
-   GIF/AVIF). Unticked clips are skipped. "Start export" closes the
-   plan and starts the jobs; several jobs run in parallel (two at a
-   time by default, raise it with the CLIPMAKER_CONCURRENCY env var).
+   select-all, and a **"combined highlights"** pane with a checkbox on
+   every group of clips that share the same note (part count and total
+   length per group, plus a "combine all groups" box). Every ticked
+   clip is exported individually; each ticked group ADDS one MP4
+   "highlights" file on top of its parts - its selected clips merged
+   with a 0.5s fade in and out per part, named
+   `<note>-highlights.mp4` (combined files are MP4 only, no GIF/AVIF,
+   and a group needs 2+ selected clips). The footer shows how many
+   clips and how many exports the plan produces. Unticked clips are
+   skipped. "Start export" closes the plan and starts the jobs;
+   several jobs run in parallel (two at a time by default, raise it
+   with the CLIPMAKER_CONCURRENCY env var).
    A front-and-center export view opens: an overall progress bar plus a
    progress bar and stage text per clip (e.g. `gif: sharable 512p25
    (8/12)`), and download links for every finished file. While it is

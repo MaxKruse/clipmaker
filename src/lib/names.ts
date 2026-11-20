@@ -29,6 +29,16 @@ export function clipFileName(
 }
 
 /**
+ * Combined highlights file name: `<note>-highlights.mp4`. Named after the
+ * group's note, never `clipN-...`, so it can never collide with the
+ * individual part exports (which the combined export produces alongside).
+ */
+export function highlightsFileName(note: string): string {
+  const t = sanitizeNote(note);
+  return t ? `${t}-highlights.mp4` : "highlights.mp4";
+}
+
+/**
  * Content-disposition header for a download. RFC 6266: the plain
  * `filename=` gets an ASCII-only fallback (non-ASCII dropped, quotes and
  * backslashes removed, "download" when nothing is left), and the real

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clipFileName, disposition, sanitizeNote } from "../src/lib/names";
+import { clipFileName, disposition, highlightsFileName, sanitizeNote } from "../src/lib/names";
 
 describe("clipFileName", () => {
   test("mp4 without note", () => {
@@ -24,6 +24,22 @@ describe("clipFileName", () => {
 
   test("note never starts/ends with dash", () => {
     expect(clipFileName(1, "  ", "mp4")).toBe("clip1.mp4");
+  });
+});
+
+describe("highlightsFileName", () => {
+  test("named after the group's note, never a clipN- part name", () => {
+    expect(highlightsFileName("Dance")).toBe("Dance-highlights.mp4");
+    expect(highlightsFileName("Dance")).not.toBe(clipFileName(1, "Dance", "mp4"));
+  });
+
+  test("sanitizes the note like clip names", () => {
+    expect(highlightsFileName('a/b: c  d')).toBe("a b c d-highlights.mp4");
+  });
+
+  test("a note with nothing left after sanitizing drops the note part", () => {
+    expect(highlightsFileName("   ")).toBe("highlights.mp4");
+    expect(highlightsFileName("///")).toBe("highlights.mp4");
   });
 });
 
