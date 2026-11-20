@@ -126,14 +126,14 @@ export function runProgress(
   const handleLine = (line: string) => {
     const eq = line.indexOf("=");
     if (eq < 0) return;
-    const key = line.slice(0, eq);
+    // out_time_us only: ffmpeg's out_time_ms field is ALSO microseconds
+    // (a long-standing ffmpeg quirk). Reading it as ms would scale the
+    // value 1000x and pin the bar at the 0.99 clamp for the whole run.
+    if (line.slice(0, eq) !== "out_time_us") return;
     const val = Number(line.slice(eq + 1));
     if (!Number.isFinite(val) || totalSec <= 0) return;
-    const us = key === "out_time_us" ? 1_000_000 : key === "out_time_ms" ? 1_000 : 0;
-    if (us) {
-      const pct = Math.min(0.99, val / (totalSec * us));
-      if (Number.isFinite(pct)) onPct(pct);
-    }
+    const pct = Math.min(0.99, val / (totalSec * 1_000_000));
+    if (Number.isFinite(pct)) onPct(pct);
   };
   child.stdout.on("data", (d: Buffer) => {
     buf += d.toString();

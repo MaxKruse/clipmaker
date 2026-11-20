@@ -98,7 +98,11 @@ Key invariants:
   server-side, so a stale UI crop can never produce an invalid filter.
 - **Progress events use `-progress pipe:1`**; both `run` and
   `runProgress` in ffmpeg.ts parse it. `runProgress` takes the expected
-  total duration and reports 0..100.
+  total duration and reports 0..100. It reads ONLY `out_time_us`:
+  ffmpeg's `out_time_ms` field is ALSO microseconds (long-standing
+  ffmpeg quirk) - parsing it as ms pins the bar at the 0.99 clamp for
+  the whole stage. Every encode builder must carry `-progress pipe:1`,
+  so each stage reports its own progress.
 - **Job stages are structured, not free strings.** The runner builds
   `JobStage` objects (stages.ts); the export modal renders them through
   `stageText`, whose wording is pinned by `test/stages.test.ts`.
