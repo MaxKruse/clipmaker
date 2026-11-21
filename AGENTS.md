@@ -154,8 +154,11 @@ Key invariants:
 - `Job { id, videoId, videoName, clip, clipNo, clips?, status, stage,
   pct, outputs, warning?, error?, createdAt }` - `clips` (present only
   on combined jobs) is the same-name group; the job produces ONE mp4
-  highlights file, `clip`/`clipNo` = the group's first member (with
-  `formats` forced to `["mp4"]` for display). `status` is
+  highlights file, `clip` = the group's first member (with
+  `formats` forced to `["mp4"]` for display). `clipNo` is the 1-based
+  position of that first member in the video's clip list (the group's
+  queue position), not a job index.
+  `status` is
   queued/running/
   done/error. `stage` is the structured `JobStage` (stages.ts) while
   running, null when settled; the modal renders it via `stageText`.
@@ -176,10 +179,14 @@ Key invariants:
 - `ingest/` - drop folder for huge files. Not created by the app (the
   user creates it, optionally at another location via
   `CLIPMAKER_INGEST_DIR`). The next page load moves proberable files
-  into `uploads/<videoId>/` and registers them; unproberable files are
-  quarantined into `ingest/failed/` with a `.err` sidecar; files still
-  being written (size change during the probe, or the writer still
-  locking them) are left in place and retried on the next page load.
+  into `uploads/<videoId>/` and registers them; files that fail the probe
+  are left in place and retried on the next page load, and only after
+  three consecutive failed sweeps are they quarantined into
+  `ingest/failed/` with a `.err` sidecar (an in-process counter, so a
+  genuinely corrupt file always reaches `failed/` while a mid-write file
+  keeps its chance); files still being written (size change during the
+  probe, or the writer still locking them) are left in place and retried
+  on the next page load.
 - `out/<videoId>/...` - per-video export dir. Dated videos (see
   VideoInfo) put every export file in a subfolder of just that date:
   `out/<videoId>/<date>/clipN[-note].mp4|gif|avif` (full tier) and
@@ -216,7 +223,8 @@ Key invariants:
   and a **sharable** tier (its longest edge scaled to `anim.maxEdge` -
   `sharableCap` picks the axis, so a portrait crop scales the height -
   capped at `anim.maxMB`, in `sharable/`; sharable gif files carry the
-  `-<maxEdge>` edge suffix).
+  `-<edge>` edge suffix of the winning rung - e.g. `-750` when the
+  ladder's first sub-cap rung is 750px, not the requested maxEdge).
   - **GIF**: shared `palettegen` from the full-res cut (256 colors,
     `stats_mode=full`); full tier = one stage-3 encode at full
     size@anim.fps, no cap; sharable tier = the ping-pong quality ladder:
@@ -294,16 +302,19 @@ Key invariants:
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
   <=480px; `time` is floored to the frame grid, the same frame the
   export will cut at.
-- `POST /api/export` - `{videoId, clips, combine?}` - validates each
-  clip server-side (end clamped to duration+0.5, min 0.2s). EVERY
-  clip always gets its own job (`clipNo` = 1-based index).
+- `POST /api/export` - `{videoId, clips, combine?, nos?}` - validates
+  each clip server-side (end clamped to duration+0.5, min 0.2s). EVERY
+  clip always gets its own job (`clipNo` = the clip's 1-based position in
+  the video's clip list). `nos` is an optional parallel array of those
+  positions (sent by the client from the in-memory queue); each entry
+  falls back to the subset index when missing or invalid.
   `combine` (optional) is an ARRAY of note keys (canonical form:
   trimmed + lowercased, `combineKey` in lib/combine.ts): for each
   key, the same-note group (empty note = never grouped) with 2+
   parts gets ONE ADDITIONAL job carrying `clips` - a combined MP4
-  highlights export (see the recipe below); `clipNo` = index of the
-  group's first clip. Requested singletons are skipped - their solo
-  job above already covers them.
+  highlights export (see the recipe below); `clipNo` = the group's
+  first clip's queue position. Requested singletons are skipped - their
+  solo job above already covers them.
 - `GET /api/jobs` (newest batch first, clip order within a batch),
   `DELETE /api/jobs` (clear finished),
   `DELETE /api/jobs/[id]` - cancel one queued/running job: sets the
@@ -635,10 +646,10 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 253 unit tests over the pure libs (times, bitrate,
+- `bun test` - 264 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
-  dialogStack, ingest, ffmpeg's once).
+  dialogStack, ingest, range, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
@@ -650,4 +661,6 @@ Key invariants:
 - Ingest: drop a file into `ingest/` and refresh - it is moved into
   `uploads/<videoId>/`, registered (banner + auto-selected); a file
   still being written reports pending and ingests on the next refresh;
-  an unproberable file lands in `ingest/failed/` with a `.err` sidecar.
+  an unproberable file is left in place and retried on the next refresh,
+  and only after three consecutive failed sweeps lands in
+  `ingest/failed/` with a `.err` sidecar.

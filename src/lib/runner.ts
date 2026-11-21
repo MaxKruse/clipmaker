@@ -351,6 +351,23 @@ async function checkDurationOrRetry(
 }
 
 /**
+ * The intermediate's dimensions and its sharable-tier scale cap/axis,
+ * shared by the gif and avif tiers. `cap` is the ladder's longest-edge
+ * limit (min of maxEdge and the full tier's edge); `axis` is the axis
+ * the ladder scales along (the longer axis, so a portrait crop keeps its
+ * height under maxEdge).
+ */
+function animFrame(
+  video: VideoInfo,
+  clip: Job["clip"],
+): { w: number; h: number; cap: number; axis: LongAxis } {
+  const w = clip.crop ? clip.crop.w : video.width;
+  const h = clip.crop ? clip.crop.h : video.height;
+  const { cap, axis } = sharableCap(clip.anim.maxEdge, w, h);
+  return { w, h, cap, axis };
+}
+
+/**
  * GIF pipeline on the shared full-res temp cut: one palette (from the
  * cut, never the VOD), then two outputs:
  *  - full tier: full-resolution at the anim fps, no size cap - the
@@ -363,7 +380,8 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const { fps, maxEdge, maxMB } = clip.anim;
+  const { fps, maxMB } = clip.anim;
+  const { w, cap, axis } = animFrame(video, clip);
   const pal = path.join(tmp, "pal.png");
 
   throwIfCancelled(job);
@@ -371,7 +389,7 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   await runTracked(job, findBin("ffmpeg"), buildGifPaletteArgs({ in: inter, out: pal }), dur);
 
   // Full tier: full resolution at the anim fps, no size cap.
-  const fullEdge = evenFloor(clip.crop ? clip.crop.w : video.width);
+  const fullEdge = evenFloor(w);
   const full = path.join(tmp, "gif-full.gif");
   job.stage = { id: "gif-full", edge: fullEdge, fps };
   await runTracked(
@@ -384,7 +402,6 @@ async function encodeGif(video: VideoInfo, job: Job, inter: string, tmp: string,
   // The ladder never upscales: capped at the full tier's LONGEST edge,
   // and scaled on that axis, so a portrait crop's height stays under
   // maxEdge too; a crop (or source) smaller than maxEdge keeps what it has.
-  const { cap, axis } = sharableCap(maxEdge, clip.crop ? clip.crop.w : video.width, clip.crop ? clip.crop.h : video.height);
   const winner = await gifSharableRung(job, inter, pal, cap, maxMB, fps, tmp, dur, axis);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });
@@ -440,7 +457,8 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   const clip = job.clip;
   const start = frameAt(clip.start, video.fps);
   const dur = clip.end - start;
-  const { fps, maxMB, maxEdge } = clip.anim;
+  const { fps, maxMB } = clip.anim;
+  const { cap, axis } = animFrame(video, clip);
   const encoder = await avifEncoder();
   if (!encoder) {
     throw new Error("this ffmpeg build has no AV1 encoder (needs libsvtav1 or libaom-av1) - re-export as mp4/gif");
@@ -462,7 +480,6 @@ async function encodeAvif(video: VideoInfo, job: Job, inter: string, tmp: string
   // The ladder never upscales: capped at the full tier's LONGEST edge,
   // and scaled on that axis, so a portrait crop's height stays under
   // maxEdge too; a crop (or source) smaller than maxEdge keeps what it has.
-  const { cap, axis } = sharableCap(maxEdge, clip.crop ? clip.crop.w : video.width, clip.crop ? clip.crop.h : video.height);
   const winner = await avifSharableRung(job, inter, cap, maxMB, fps, encoder, dur, tmp, axis);
   const shareDir = path.join(outDir, "sharable");
   fs.mkdirSync(shareDir, { recursive: true });

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { Readable } from "node:stream";
 import { NextRequest, NextResponse } from "next/server";
+import { parseRangeHeader } from "@/lib/range";
 import { store } from "@/lib/store";
 
 const MIME: Record<string, string> = {
@@ -36,17 +37,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     "cache-control": "no-store",
   };
 
-  const range = req.headers.get("range");
-  if (range) {
-    const m = range.match(/bytes=(\d*)-(\d*)/);
-    if (!m) {
-      return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
-    }
-    const start = m[1] ? Number(m[1]) : 0;
-    const end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
-    if (start > end || start >= size) {
-      return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
-    }
+  const parsed = parseRangeHeader(req.headers.get("range"), size);
+  if (parsed.kind === "unsatisfiable") {
+    return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
+  }
+  if (parsed.kind === "range") {
+    const { start, end } = parsed.range;
     const stream = Readable.toWeb(fs.createReadStream(v.path, { start, end })) as unknown as ReadableStream;
     return new Response(stream, {
       status: 206,

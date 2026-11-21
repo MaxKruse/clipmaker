@@ -77,6 +77,14 @@ export function Stage(props: StageProps) {
     if (v) v.muted = muted;
   }, [muted, videoRef]);
 
+  // Callbacks come from the page as inline lambdas: keep the latest
+  // versions in a ref so the keydown subscription never re-subscribes
+  // on every render (which would drop a keypress between renders).
+  const cbRef = useRef({ onTogglePlay, onIn, onOut, onSeek, onBack });
+  useEffect(() => {
+    cbRef.current = { onTogglePlay, onIn, onOut, onSeek, onBack };
+  });
+
   // Space play/pause, I/O set in/out, arrows seek (shift = one frame).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,24 +96,25 @@ export function Stage(props: StageProps) {
       const v = videoRef.current;
       if (!v) return;
       const frame = 1 / fps;
+      const cb = cbRef.current;
       if (e.key === " ") {
         e.preventDefault();
-        onTogglePlay(v.paused);
+        cb.onTogglePlay(v.paused);
       } else if (e.key === "i" || e.key === "I") {
-        onIn(v.currentTime);
+        cb.onIn(v.currentTime);
       } else if (e.key === "o" || e.key === "O") {
-        onOut(v.currentTime);
+        cb.onOut(v.currentTime);
       } else if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
         const dir = e.key === "ArrowLeft" ? -1 : 1;
-        onSeek(v.currentTime + dir * (e.shiftKey ? frame : 1));
+        cb.onSeek(v.currentTime + dir * (e.shiftKey ? frame : 1));
       } else if (e.key === "Escape") {
-        onBack();
+        cb.onBack();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [fps, videoRef, onTogglePlay, onIn, onOut, onSeek, onBack]);
+  }, [fps, videoRef]);
 
   // Letterbox: the video frame rect inside the stage video box.
   const scale = box.w > 0 && box.h > 0 ? Math.min(box.w / srcW, box.h / srcH) : 0;

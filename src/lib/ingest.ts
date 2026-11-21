@@ -73,6 +73,12 @@ export function classifyMoveFailure(code: string | undefined): "skip" | "pending
 // The sweep (server-only)
 // ---------------------------------------------------------------------------
 
+// Consecutive failed sweeps per file path (in-process). A file that
+// fails to probe may still be mid-write (truncated moov, writer lock):
+// only a file that fails consistently across sweeps is quarantined.
+const failedProbes = new Map<string, number>();
+const FAILED_PROBE_LIMIT = 3;
+
 let activeSweep: Promise<IngestReport> | null = null;
 
 /**
@@ -92,6 +98,11 @@ export function sweepIngest(): Promise<IngestReport> {
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 async function runSweep(): Promise<IngestReport> {
+  // Prune vanished files from the failed-probe counter.
+  for (const key of [...failedProbes.keys()]) {
+    if (!fs.existsSync(key)) failedProbes.delete(key);
+  }
+
   const report: IngestReport = { ingested: [], rejected: [], pending: [] };
   let entries: fs.Dirent[];
   try {
@@ -121,7 +132,20 @@ async function ingestOne(src: string, name: string, report: IngestReport): Promi
   try {
     info = await probeVideo(src);
     if (!info.width) throw new Error("no video stream found");
+    // A successful probe resets the failure counter: the file may have
+    // been mid-write on an earlier sweep.
+    failedProbes.delete(src);
   } catch (e) {
+    const n = (failedProbes.get(src) ?? 0) + 1;
+    failedProbes.set(src, n);
+    if (n < FAILED_PROBE_LIMIT) {
+      // Possibly still mid-write (truncated moov, writer lock): leave it
+      // in place and retry on the next sweep.
+      report.pending.push(name);
+      return;
+    }
+    // Repeated failures: genuinely unproberable - quarantine.
+    failedProbes.delete(src);
     quarantine(src, name, errMsg(e), report);
     return;
   }

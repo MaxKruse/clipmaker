@@ -184,7 +184,11 @@ class Store {
     let dropped = 0;
     for (const [id, list] of Object.entries(raw)) {
       if (Array.isArray(list) && this.videos.has(id)) {
-        this.clips.set(id, list.filter((c) => c && typeof c.id === "string"));
+        const kept = list.filter((c) => c && typeof c.id === "string");
+        // Invalid rows are dropped from the in-memory list; the disk
+        // file must not keep them either, so the rewrite below covers it.
+        dropped += list.length - kept.length;
+        this.clips.set(id, kept);
       } else {
         // Orphan: the video no longer exists (removed via the UI, or its
         // source file was deleted outside the app).

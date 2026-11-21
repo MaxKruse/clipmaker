@@ -13,6 +13,9 @@ export async function POST(req: NextRequest) {
       /** Note keys (trimmed + lowercased) of the groups that get a
        * combined mp4 highlights job, in addition to their parts. */
       combine?: unknown;
+      /** 1-based queue positions of the ticked clips, parallel to
+       * `clips` (0/missing = fall back to the subset index). */
+      nos?: unknown;
     };
     const v = store.videos.get(body.videoId ?? "");
     if (!v) return NextResponse.json({ error: "unknown video" }, { status: 404 });
@@ -30,6 +33,14 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+    // The 1-based queue positions of the ticked clips (sent by the client);
+    // anything that is not a valid position falls back to the subset index.
+    const nos = Array.isArray(body.nos) ? body.nos : null;
+    const clipNoFor = (i: number): number => {
+      const n = nos?.[i];
+      return typeof n === "number" && Number.isInteger(n) && n >= 1 ? n : i + 1;
+    };
+
 
     // One timestamp per request: a batch stays tied together so the
     // export list renders it in clip order (stable sort on ties).
@@ -45,7 +56,7 @@ export async function POST(req: NextRequest) {
         videoId: v.id,
         videoName: v.name,
         clip: clips[i],
-        clipNo: i + 1,
+        clipNo: clipNoFor(i),
         status: "queued" as const,
         stage: null,
         pct: 0,
@@ -76,7 +87,7 @@ export async function POST(req: NextRequest) {
         // A combined job produces the single mp4 highlights file, so its
         // representative clip (display + naming) is mp4-only.
         clip: { ...first, formats: ["mp4"] },
-        clipNo: clips.indexOf(first) + 1,
+        clipNo: clipNoFor(clips.indexOf(first)),
         clips: group,
         status: "queued" as const,
         stage: null,

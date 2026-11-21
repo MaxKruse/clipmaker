@@ -53,7 +53,16 @@ interface FilmstripState {
   done: number;
   ready: boolean;
   promise: Promise<void> | null;
+  attempts: number;
 }
+
+/**
+ * Hard cap on generation passes. Frame extraction is fast and idempotent,
+ * so a transient failure (slow seek, ffmpeg hiccup) is retried on the
+ * next status poll; a permanently unextractable frame stops the loop
+ * after a few passes instead of polling forever.
+ */
+const MAX_GENERATION_ATTEMPTS = 3;
 
 const states = new Map<string, FilmstripState>();
 
@@ -67,6 +76,9 @@ function thumbPath(videoId: string, t: number): string {
 /** Delete a video's cached filmstrip frames (video removal). */
 export function removeThumbsForVideo(videoId: string): void {
   fs.rmSync(path.join(THUMBS_DIR, videoId), { recursive: true, force: true });
+  // The in-memory state must not linger for a deleted video (it would
+  // keep a stale status alive for the next video that reuses the id).
+  states.delete(videoId);
 }
 /** One fast-seek frame at time t, scaled to a small jpeg. Never rejects. */
 function extractThumb(video: VideoInfo, t: number): Promise<void> {
@@ -113,9 +125,10 @@ function startGeneration(video: VideoInfo, st: FilmstripState): void {
     st.ready = true;
     return;
   }
+  st.attempts += 1;
   st.promise = pool(missing, 6, (t) => extractThumb(video, t).catch(() => undefined)).then(() => {
     st.done = presentCount(video);
-    st.ready = true;
+    st.ready = st.done === st.total || st.attempts >= MAX_GENERATION_ATTEMPTS;
   }).finally(() => {
     st.promise = null;
   });
@@ -132,10 +145,10 @@ export function filmstrip(video: VideoInfo): FilmstripStatus {
     fs.mkdirSync(thumbDir(video.id), { recursive: true });
     const plan = filmstripPlan(video.duration);
     const done = presentCount(video);
-    st = { interval: plan.interval, total: plan.times.length, done, ready: done === plan.times.length, promise: null };
+    st = { interval: plan.interval, total: plan.times.length, done, ready: done === plan.times.length, promise: null, attempts: 0 };
     states.set(video.id, st);
   }
-  if (!st.ready && !st.promise) startGeneration(video, st);
+  if (!st.ready && !st.promise && st.attempts < MAX_GENERATION_ATTEMPTS) startGeneration(video, st);
   return { ready: st.ready, interval: st.interval, total: st.total, done: st.done };
 }
 

@@ -307,7 +307,7 @@ export default function Page() {
     if (p) {
       // Playing accepts the preview position as the new one.
       dispatch({ type: "cancel-return" });
-      void v.play();
+      void v.play().catch(() => {});
     } else {
       v.pause();
     }
@@ -327,7 +327,7 @@ export default function Page() {
       }
     } else if (dragSuspended.current) {
       dragSuspended.current = false;
-      void v.play();
+      void v.play().catch(() => {});
     }
   };
 
@@ -497,6 +497,12 @@ export default function Page() {
     if (!active) return;
     setExporting(true);
     setExportError(null);
+    // Queue positions (1-based) of the selected clips: the export list
+    // shows them so a #N in the modal matches the clip it stands for.
+    const nos = selected.map((c) => {
+      const i = activeClips.findIndex((x) => x.id === c.id);
+      return i >= 0 ? i + 1 : 0;
+    });
     try {
       const res = await fetch("/api/export", {
         method: "POST",
@@ -504,6 +510,7 @@ export default function Page() {
         body: JSON.stringify({
           videoId: active.id,
           clips: selected,
+          nos,
           ...(combineKeys.length > 0 ? { combine: combineKeys } : {}),
         }),
       });
