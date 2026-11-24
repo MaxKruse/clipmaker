@@ -63,7 +63,10 @@ src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
                     combo cut, combo share-section middle cut, combo
                     sharable re-encode, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
-src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) -
+src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) +
+                    safeOutputName (only a bare name, sharable/ or
+                    highlights/ may reach the out dir - loadJobs drops
+                    rows carrying anything else) -
                     server-only (node:path); the client imports jobs.ts
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
@@ -174,10 +177,11 @@ Key invariants:
   `outputs` is an array of `{ kind: "mp4" | "gif" | "avif",
   name, size, tier?: "full" | "sharable" }` for files under the video's
   `out/<videoId>/`, plus the `<date>` subfolder for dated
-  ids (`name` may be a relative path like
-  `sharable/clip1-note.gif`; `tier` is absent on old jobs). Combined
-  jobs push the full highlights file (`tier: "full"`) and, when the
-  sharable ladder fits, `sharable/<note>-highlights.mp4`
+  `name` may be a relative path like `sharable/clip1-note.gif` or
+  `highlights/<note>-highlights.mp4`; `tier` is absent on old jobs).
+  Combined jobs push the full highlights file in its own highlights/
+  folder (`highlights/<note>-highlights.mp4`, `tier: "full"`) and, when
+  the sharable ladder fits, `sharable/<note>-highlights.mp4`
   (`tier: "sharable"`) - the middle-sections file, ONE entry no matter
   how long the full tier is.
 - `Job.stage` is null when the job settles, including on error.
@@ -277,9 +281,11 @@ Key invariants:
   quality (first clip's), `+faststart`; the final encode is
   duration-verified against `comboDuration` (sum of per-part durations)
   with one retry (stage `mp4-encode`). Output file:
-  `<note>-highlights.mp4` (`highlightsFileName` in names.ts) - never a
-  `clipN-` name, so it can never collide with a part's own mp4
-  (part #N owns `clipN-note.mp4` and exports alongside it).
+  `highlights/<note>-highlights.mp4` - the combined file sits in its own
+  `highlights/` folder in the export dir (bare name from
+  `highlightsFileName` in names.ts), never a `clipN-` name, so it can
+  never collide with a part's own mp4 (part #N owns `clipN-note.mp4`
+  and exports alongside it).
   **Sharable tier** (an ADDITION to the full file): ONE short file per
   group that represents every part - each part contributes its MIDDLE
   section (stage `mp4-share-cut`, "mp4 sharable section i/n"):
@@ -691,7 +697,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 285 unit tests over the pure libs (times, bitrate,
+- `bun test` - 287 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, range, ffmpeg's once).
@@ -703,8 +709,9 @@ Key invariants:
   maxEdge (or the crop's longest edge when smaller) within the size cap,
   avif codec `av1`) and confirm
   `GET /api/videos/<id>/file` answers 206 for a Range request. A
-  combined export additionally writes `sharable/<note>-highlights.mp4`
-  (30fps, the middle-sections file: ~180s of content from 8-15s middles
+  combined export writes `highlights/<note>-highlights.mp4` plus a
+  `sharable/<note>-highlights.mp4` (the sharable one: 30fps, the
+  middle-sections file - ~180s of content from 8-15s middles
   per part, longest edge at the first fitting rung starting at the full
   resolution, under 48MB, one file no matter how long the full tier is).
   Run against

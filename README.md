@@ -114,7 +114,8 @@ port).
    clip is exported individually; each ticked group ADDS one MP4
    "highlights" file on top of its parts - its selected clips merged
    with a 0.5s fade in and out per part, named
-   `<note>-highlights.mp4` (combined files are MP4 only, no GIF/AVIF,
+   `highlights/<note>-highlights.mp4` (in its own `highlights/` folder;
+   combined files are MP4 only, no GIF/AVIF,
    and a group needs 2+ selected clips). Every combined file also gets
    a sharable copy (`sharable/<note>-highlights.mp4`): one short file
    that shows a bit of every part - each part contributes its middle
@@ -137,7 +138,8 @@ port).
    deletes its temp files) and marks it `cancelled by user`, leaving
    the rest of the batch to finish. Files are also written to
    `out/<video-id>/` on disk, sharable copies in
-   `out/<video-id>/sharable/`. When the video's file name carries a
+   `out/<video-id>/sharable/`, and the combined highlights file in
+   `out/<video-id>/highlights/`. When the video's file name carries a
    broadcast date (e.g. a Twitch download named
    `twitch_user_2026-11-19 07-03-30_...`), the video id starts with it
    (`2026-11-19_ab12cd34`) so the folders sort chronologically, and
