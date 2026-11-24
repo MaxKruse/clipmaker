@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   buildAvifArgs,
+  buildComboShareArgs,
   buildConcatArgs,
   buildComboCutArgs,
   buildGifPaletteArgs,
@@ -12,7 +13,15 @@ import {
   type Mp4Encoder,
 } from "./args";
 import { resolveOutKbit } from "./bitrate";
-import { comboDuration, comboFade, comboTarget } from "./combine";
+import {
+  comboDuration,
+  comboFade,
+  comboShareRungs,
+  comboTarget,
+  COMBO_SHARE_CRF,
+  COMBO_SHARE_FPS,
+  COMBO_SHARE_MAX_MB,
+} from "./combine";
 import {
   avifEncoder,
   CancelledError,
@@ -270,8 +279,78 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   await concat();
   const warn = await checkDurationOrRetry(outPath, total, fps, job, concat);
   if (warn) job.warning = warn;
-  job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size });
+  job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size, tier: "full" });
+
+  // Sharable tier: the finished file re-encoded at a fixed 30fps, the
+  // longest-edge ladder (768/512/256, capped at the full tier) top-down,
+  // first rung under the 48MB cap wins. Unlike the gif/avif ladders this
+  // runs AFTER the full tier is on disk, so when even the smallest rung
+  // exceeds the cap the full file stays and the tier is skipped with a
+  // warning instead of failing the job.
+  const rungs = comboShareRungs(target.w, target.h);
+  const share = await comboShareRung(job, outPath, total, groupAudio, encoder, tmp, target, rungs);
+  if (share) {
+    const shareDir = path.join(outDir, "sharable");
+    fs.mkdirSync(shareDir, { recursive: true });
+    fs.renameSync(share.file, path.join(shareDir, outName));
+    const sharePath = path.join(shareDir, outName);
+    await checkSharableDuration(sharePath, total, COMBO_SHARE_FPS, job, "mp4");
+    job.outputs.push({
+      kind: "mp4",
+      name: `sharable/${outName}`,
+      size: fs.statSync(sharePath).size,
+      tier: "sharable",
+    });
+  } else {
+    const smallest = rungs[rungs.length - 1];
+    const msg = `sharable highlights exceed the ${COMBO_SHARE_MAX_MB}MB cap even at ${smallest}px/${COMBO_SHARE_FPS}fps - no sharable copy written; shorten the clips or raise the cap`;
+    job.warning = job.warning ? `${job.warning} · ${msg}` : msg;
+  }
   store.updateJob(job);
+}
+
+/**
+ * Sharable combined tier: the finished highlights file re-encoded rung by
+ * rung (highest quality first) at a fixed 30fps; the first file under the
+ * 48MB cap wins. Returns null when every rung exceeds the cap (the caller
+ * warns; the full tier is already on disk and stays).
+ */
+async function comboShareRung(
+  job: Job,
+  src: string,
+  dur: number,
+  audio: boolean,
+  encoder: Mp4Encoder,
+  tmp: string,
+  target: { w: number; h: number },
+  rungs: number[],
+): Promise<{ file: string; rung: number } | null> {
+  const maxBytes = COMBO_SHARE_MAX_MB * 1024 * 1024;
+  const axis: LongAxis = target.w >= target.h ? "w" : "h";
+  for (let i = 0; i < rungs.length; i++) {
+    throwIfCancelled(job);
+    const edge = rungs[i];
+    const f = path.join(tmp, `share-${edge}.mp4`);
+    job.stage = { id: "mp4-share-rung", edge, fps: COMBO_SHARE_FPS, index: i + 1, total: rungs.length };
+    await runTracked(
+      job,
+      findBin("ffmpeg"),
+      buildComboShareArgs({
+        in: src,
+        out: f,
+        fps: COMBO_SHARE_FPS,
+        edge,
+        axis,
+        encoder,
+        crf: COMBO_SHARE_CRF,
+        audio,
+      }),
+      dur,
+    );
+    if (fs.statSync(f).size <= maxBytes) return { file: f, rung: edge };
+    fs.rmSync(f, { force: true });
+  }
+  return null;
 }
 
 /** A concat-demuxer list file pointing at the given segments. */
@@ -314,14 +393,14 @@ async function encodeMp4(video: VideoInfo, job: Job, outDir: string) {
   store.updateJob(job);
 }
 
-/** Warn (not fail) when a sharable gif/avif's duration misses the
+/** Warn (not fail) when a sharable output's duration misses the
  * request by more than 1.5 frames at the rung's fps. */
 async function checkSharableDuration(
   file: string,
   dur: number,
   fps: number,
   job: Job,
-  kind: "gif" | "avif",
+  kind: "mp4" | "gif" | "avif",
 ): Promise<void> {
   const { container } = await streamDurations(file);
   if (Math.abs(container - dur) > 1.5 / fps) {
