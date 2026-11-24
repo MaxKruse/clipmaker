@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAvifArgs,
   buildComboShareArgs,
+  buildComboSharePartArgs,
   buildConcatArgs,
   buildComboCutArgs,
   buildGifPaletteArgs,
@@ -341,6 +342,32 @@ describe("buildComboShareArgs", () => {
       "-cq", "20", "-profile:v", "high",
       "-an",
       "-movflags", "+faststart", "out.mp4",
+    ]);
+  });
+});
+
+describe("buildComboSharePartArgs", () => {
+  test("stream-copy video concat, audio re-encoded to one track", () => {
+    expect(
+      buildComboSharePartArgs({ list: "list.txt", out: "part.mp4", audio: true }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-f", "concat", "-safe", "0", "-i", "list.txt",
+      "-c:v", "copy",
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+      "-movflags", "+faststart", "part.mp4",
+    ]);
+  });
+
+  test("a group without audio: -an", () => {
+    expect(
+      buildComboSharePartArgs({ list: "list.txt", out: "part.mp4", audio: false }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-f", "concat", "-safe", "0", "-i", "list.txt",
+      "-c:v", "copy",
+      "-an",
+      "-movflags", "+faststart", "part.mp4",
     ]);
   });
 });

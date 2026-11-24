@@ -13,6 +13,8 @@ test("renders the pipeline stages in the legacy wording", () => {
     [{ id: "mp4-encode", encoder: "libx264", kbit: 2500, fps: 30 }, "mp4 libx264 2500k 30fps"],
     [{ id: "mp4-retry" }, "mp4 retry"],
     [{ id: "mp4-share-rung", edge: 768, fps: 30, index: 1, total: 3 }, "mp4 sharable 768p30 (1/3)"],
+    [{ id: "mp4-share-part", index: 2, total: 4 }, "mp4 sharable part 2/4"],
+    [{ id: "mp4-share-rung", edge: 512, fps: 30, index: 2, total: 3, part: 2, partTotal: 4 }, "mp4 sharable part 2/4: 512p30 (2/3)"],
     [{ id: "anim-cut" }, "anim: cut (full-res)"],
     [{ id: "gif-palette" }, "gif: palette"],
     [{ id: "gif-full", edge: 1920, fps: 30 }, "gif: full 1920p30"],

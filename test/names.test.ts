@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clipFileName, disposition, highlightsFileName, sanitizeNote } from "../src/lib/names";
+import { clipFileName, disposition, highlightsFileName, highlightsPartFileName, sanitizeNote } from "../src/lib/names";
 
 describe("clipFileName", () => {
   test("mp4 without note", () => {
@@ -40,6 +40,21 @@ describe("highlightsFileName", () => {
   test("a note with nothing left after sanitizing drops the note part", () => {
     expect(highlightsFileName("   ")).toBe("highlights.mp4");
     expect(highlightsFileName("///")).toBe("highlights.mp4");
+  });
+});
+
+describe("highlightsPartFileName", () => {
+  test("numbered part after the highlights base", () => {
+    expect(highlightsPartFileName("Dance", 2)).toBe("Dance-highlights-2.mp4");
+    expect(highlightsPartFileName("Dance", 1)).not.toBe(highlightsFileName("Dance"));
+  });
+
+  test("sanitizes the note like highlightsFileName", () => {
+    expect(highlightsPartFileName('a/b: c  d', 1)).toBe("a b c d-highlights-1.mp4");
+  });
+
+  test("an empty note keeps the bare base", () => {
+    expect(highlightsPartFileName("   ", 3)).toBe("highlights-3.mp4");
   });
 });
 

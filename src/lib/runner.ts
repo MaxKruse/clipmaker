@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   buildAvifArgs,
   buildComboShareArgs,
+  buildComboSharePartArgs,
   buildConcatArgs,
   buildComboCutArgs,
   buildGifPaletteArgs,
@@ -16,6 +17,7 @@ import { resolveOutKbit } from "./bitrate";
 import {
   comboDuration,
   comboFade,
+  comboShareGroups,
   comboShareRungs,
   comboTarget,
   COMBO_SHARE_CRF,
@@ -43,7 +45,7 @@ import {
   type LongAxis,
   type Rung,
 } from "./ladder";
-import { clipFileName, highlightsFileName } from "./names";
+import { clipFileName, highlightsFileName, highlightsPartFileName } from "./names";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
@@ -283,30 +285,105 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
 
   // Sharable tier: the finished file re-encoded at a fixed 30fps, the
   // longest-edge ladder (768/512/256, capped at the full tier) top-down,
-  // first rung under the 48MB cap wins. Unlike the gif/avif ladders this
-  // runs AFTER the full tier is on disk, so when even the smallest rung
-  // exceeds the cap the full file stays and the tier is skipped with a
-  // warning instead of failing the job.
+  // first rung under the 48MB cap wins. A file longer than
+  // COMBO_SHARE_PART_SECONDS is cut into consecutive parts, each its own
+  // sharable file (the full tier stays one file). Unlike the gif/avif
+  // ladders this runs AFTER the full tier is on disk, so when even the
+  // smallest rung exceeds the cap the full file stays and the tier (or
+  // that part) is skipped with a warning instead of failing the job.
+  const durs = parts.map((p) => p.end - frameAt(p.start, video.fps));
+  const groups = comboShareGroups(durs);
   const rungs = comboShareRungs(target.w, target.h);
-  const share = await comboShareRung(job, outPath, total, groupAudio, encoder, tmp, target, rungs);
-  if (share) {
-    const shareDir = path.join(outDir, "sharable");
-    fs.mkdirSync(shareDir, { recursive: true });
-    fs.renameSync(share.file, path.join(shareDir, outName));
-    const sharePath = path.join(shareDir, outName);
-    await checkSharableDuration(sharePath, total, COMBO_SHARE_FPS, job, "mp4");
-    job.outputs.push({
-      kind: "mp4",
-      name: `sharable/${outName}`,
-      size: fs.statSync(sharePath).size,
-      tier: "sharable",
-    });
+  if (groups.length === 1) {
+    const share = await comboShareRung(job, outPath, total, groupAudio, encoder, tmp, target, rungs);
+    if (share) {
+      const shareDir = path.join(outDir, "sharable");
+      fs.mkdirSync(shareDir, { recursive: true });
+      fs.renameSync(share.file, path.join(shareDir, outName));
+      const sharePath = path.join(shareDir, outName);
+      await checkSharableDuration(sharePath, total, COMBO_SHARE_FPS, job, "mp4");
+      job.outputs.push({
+        kind: "mp4",
+        name: `sharable/${outName}`,
+        size: fs.statSync(sharePath).size,
+        tier: "sharable",
+      });
+    } else {
+      const msg = `${shareCapWarning("highlights", rungs)} - no sharable copy written; shorten the clips or raise the cap`;
+      job.warning = job.warning ? `${job.warning} · ${msg}` : msg;
+    }
   } else {
-    const smallest = rungs[rungs.length - 1];
-    const msg = `sharable highlights exceed the ${COMBO_SHARE_MAX_MB}MB cap even at ${smallest}px/${COMBO_SHARE_FPS}fps - no sharable copy written; shorten the clips or raise the cap`;
-    job.warning = job.warning ? `${job.warning} · ${msg}` : msg;
+    await comboShareParts(job, segs, durs, groups, first.note, groupAudio, encoder, target, rungs, outDir, tmp);
   }
   store.updateJob(job);
+}
+
+/** "sharable <subject> exceeds the 48MB cap even at <smallest>px/30fps". */
+function shareCapWarning(subject: string, rungs: number[]): string {
+  const smallest = rungs[rungs.length - 1];
+  return `sharable ${subject} exceeds the ${COMBO_SHARE_MAX_MB}MB cap even at ${smallest}px/${COMBO_SHARE_FPS}fps`;
+}
+
+/**
+ * Multi-part sharable tier: the combined file is longer than
+ * COMBO_SHARE_PART_SECONDS, so each consecutive part group becomes its
+ * own sharable file (its segments stream-concatenated, then the rung
+ * ladder per part). A part that misses the cap warns; the full file and
+ * the other parts stay.
+ */
+async function comboShareParts(
+  job: Job,
+  segs: string[],
+  durs: number[],
+  groups: number[][],
+  note: string,
+  audio: boolean,
+  encoder: Mp4Encoder,
+  target: { w: number; h: number },
+  rungs: number[],
+  outDir: string,
+  tmp: string,
+): Promise<void> {
+  const shareDir = path.join(outDir, "sharable");
+  fs.mkdirSync(shareDir, { recursive: true });
+  for (let k = 0; k < groups.length; k++) {
+    const g = groups[k];
+    throwIfCancelled(job);
+    const partDur = g.reduce((s, i) => s + durs[i], 0);
+    const partFile = path.join(tmp, `share-part-${k + 1}.mp4`);
+    job.stage = { id: "mp4-share-part", index: k + 1, total: groups.length };
+    store.updateJob(job);
+    await runTracked(
+      job,
+      findBin("ffmpeg"),
+      buildComboSharePartArgs({
+        list: writeConcatList(tmp, `share-part-${k + 1}.txt`, g.map((i) => segs[i])),
+        out: partFile,
+        audio,
+      }),
+      partDur,
+    );
+    const share = await comboShareRung(
+      job, partFile, partDur, audio, encoder, tmp, target, rungs,
+      { index: k + 1, total: groups.length },
+    );
+    if (share) {
+      const name = highlightsPartFileName(note, k + 1);
+      const sharePath = path.join(shareDir, name);
+      fs.renameSync(share.file, sharePath);
+      await checkSharableDuration(sharePath, partDur, COMBO_SHARE_FPS, job, "mp4");
+      job.outputs.push({
+        kind: "mp4",
+        name: `sharable/${name}`,
+        size: fs.statSync(sharePath).size,
+        tier: "sharable",
+      });
+    } else {
+      const msg = `${shareCapWarning(`highlights part ${k + 1}/${groups.length}`, rungs)} - no sharable copy of that part; shorten the clips or raise the cap`;
+      job.warning = job.warning ? `${job.warning} · ${msg}` : msg;
+    }
+    store.updateJob(job);
+  }
 }
 
 /**
@@ -324,6 +401,7 @@ async function comboShareRung(
   tmp: string,
   target: { w: number; h: number },
   rungs: number[],
+  part?: { index: number; total: number },
 ): Promise<{ file: string; rung: number } | null> {
   const maxBytes = COMBO_SHARE_MAX_MB * 1024 * 1024;
   const axis: LongAxis = target.w >= target.h ? "w" : "h";
@@ -331,7 +409,17 @@ async function comboShareRung(
     throwIfCancelled(job);
     const edge = rungs[i];
     const f = path.join(tmp, `share-${edge}.mp4`);
-    job.stage = { id: "mp4-share-rung", edge, fps: COMBO_SHARE_FPS, index: i + 1, total: rungs.length };
+    job.stage = part
+      ? {
+          id: "mp4-share-rung",
+          edge,
+          fps: COMBO_SHARE_FPS,
+          index: i + 1,
+          total: rungs.length,
+          part: part.index,
+          partTotal: part.total,
+        }
+      : { id: "mp4-share-rung", edge, fps: COMBO_SHARE_FPS, index: i + 1, total: rungs.length };
     await runTracked(
       job,
       findBin("ffmpeg"),

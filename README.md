@@ -119,7 +119,9 @@ port).
    a sharable copy (`sharable/<note>-highlights.mp4`): the finished
    file re-encoded at a fixed 30fps with the longest edge at 768, 512,
    or 256 (the first size that fits under 48MB), small enough to send
-   over chat. The footer shows how many
+   over chat. A highlights file longer than 2 minutes becomes numbered
+   parts (`sharable/<note>-highlights-1.mp4`, `-2`, ...), each at most
+   2 minutes long, so even a 4-minute highlight stays sendable. The footer shows how many
    clips and how many exports the plan produces. Unticked clips are
    skipped. "Start export" closes the plan and starts the jobs;
    several jobs run in parallel (two at a time by default, raise it
@@ -251,7 +253,10 @@ original must stay in place, use "Add by path" instead.
   the finished file (fixed 30fps, longest edge 768/512/256, never
   upscaled, 48MB cap, audio at 96k). When even the smallest size
   exceeds the cap, the full file is kept and the job shows a warning
-  instead of failing.
+  instead of failing. A combined file longer than 2 minutes is split
+  into consecutive parts of at most 2 minutes each, each encoded as its
+  own sharable file (`sharable/<note>-highlights-<n>.mp4`); a part that
+  exceeds the cap warns while the full file and the other parts stay.
 - Session data (loaded videos, clip lists, job history, new-clip
   defaults) lives in `.data/`; running jobs are not resumable after a
   server restart.

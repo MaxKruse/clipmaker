@@ -105,3 +105,36 @@ export function comboShareRungs(w: number, h: number): number[] {
   }
   return rungs;
 }
+
+/**
+ * Max duration (seconds) of one sharable highlights part: a combined file
+ * longer than this is cut into consecutive parts of at most this length
+ * each (a 4-minute highlight stays shareable as several short files);
+ * the full tier always stays one file.
+ */
+export const COMBO_SHARE_PART_SECONDS = 120;
+
+/**
+ * Consecutive part indices of the sharable highlights tier: pack the
+ * parts' cut durations (the same floors the cuts use) in part order into
+ * groups totaling at most COMBO_SHARE_PART_SECONDS. A part longer than
+ * the cap keeps its own group - a clip can't be split without re-cutting.
+ * One group (the whole file fits) is the single-file path.
+ */
+export function comboShareGroups(durs: number[]): number[][] {
+  if (durs.length === 0) return [];
+  const groups: number[][] = [];
+  let cur: number[] = [];
+  let sum = 0;
+  for (let i = 0; i < durs.length; i++) {
+    if (cur.length > 0 && sum + durs[i] > COMBO_SHARE_PART_SECONDS) {
+      groups.push(cur);
+      cur = [];
+      sum = 0;
+    }
+    cur.push(i);
+    sum += durs[i];
+  }
+  groups.push(cur);
+  return groups;
+}

@@ -278,6 +278,30 @@ export function buildComboShareArgs(s: {
 }
 
 /**
+ * Multi-part sharable tier: stream-concatenate one part's pre-cut
+ * segments into the mp4 that feeds the rung ladder. All segments share
+ * the group's video stream (one encoder, one size, one fps, and the
+ * ultrafast intermediate has no B-frames), so the video is copied; the
+ * audio is re-encoded (never copied) so a part mixing source-audio and
+ * silent segments lands on one uniform track.
+ */
+export function buildComboSharePartArgs(s: {
+  list: string;
+  out: string;
+  audio: boolean;
+}): string[] {
+  const a = [
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+    "-f", "concat", "-safe", "0", "-i", s.list,
+    "-c:v", "copy",
+  ];
+  if (s.audio) a.push("-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  else a.push("-an");
+  a.push("-movflags", "+faststart", s.out);
+  return a;
+}
+
+/**
  * Concatenate pre-cut combined-export parts (concat demuxer list) into
  * the final mp4, re-encoded with the mp4 recipe (same encoder + bitrate
  * control as a single-clip export). Re-encoding (never stream-copy)

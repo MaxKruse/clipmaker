@@ -3,8 +3,10 @@ import {
   COMBO_FADE_SECONDS,
   COMBO_SHARE_FPS,
   COMBO_SHARE_MAX_MB,
+  COMBO_SHARE_PART_SECONDS,
   comboDuration,
   comboFade,
+  comboShareGroups,
   comboShareRungs,
   comboTarget,
   groupCombine,
@@ -123,9 +125,10 @@ describe("comboTarget", () => {
 });
 
 describe("sharable combined tier", () => {
-  test("constants: 30fps fixed, 48MB cap", () => {
+  test("constants: 30fps fixed, 48MB cap, 120s max part length", () => {
     expect(COMBO_SHARE_FPS).toBe(30);
     expect(COMBO_SHARE_MAX_MB).toBe(48);
+    expect(COMBO_SHARE_PART_SECONDS).toBe(120);
   });
 });
 
@@ -154,5 +157,31 @@ describe("comboShareRungs", () => {
 
   test("a portrait frame is driven by its longest edge (height)", () => {
     expect(comboShareRungs(400, 800)).toEqual([768, 512, 256]);
+  });
+});
+
+describe("comboShareGroups", () => {
+  test("a short file stays one group (the single-file path)", () => {
+    expect(comboShareGroups([30, 40, 30])).toEqual([[0, 1, 2]]);
+  });
+
+  test("the cap is inclusive: a file of exactly the cap stays together", () => {
+    expect(comboShareGroups([60, 60])).toEqual([[0, 1]]);
+  });
+
+  test("a 4-minute file of 60s parts splits into 120s groups", () => {
+    expect(comboShareGroups([60, 60, 60, 60])).toEqual([[0, 1], [2, 3]]);
+  });
+
+  test("packing is greedy in part order: parts never cross a group", () => {
+    expect(comboShareGroups([90, 30, 90, 30, 90])).toEqual([[0, 1], [2, 3], [4]]);
+  });
+
+  test("a part longer than the cap keeps its own group", () => {
+    expect(comboShareGroups([150, 30, 30])).toEqual([[0], [1, 2]]);
+  });
+
+  test("no parts, no groups", () => {
+    expect(comboShareGroups([])).toEqual([]);
   });
 });
