@@ -115,7 +115,11 @@ port).
    "highlights" file on top of its parts - its selected clips merged
    with a 0.5s fade in and out per part, named
    `<note>-highlights.mp4` (combined files are MP4 only, no GIF/AVIF,
-   and a group needs 2+ selected clips). The footer shows how many
+   and a group needs 2+ selected clips). Every combined file also gets
+   a sharable copy (`sharable/<note>-highlights.mp4`): the finished
+   file re-encoded at a fixed 30fps with the longest edge at 768, 512,
+   or 256 (the first size that fits under 48MB), small enough to send
+   over chat. The footer shows how many
    clips and how many exports the plan produces. Unticked clips are
    skipped. "Start export" closes the plan and starts the jobs;
    several jobs run in parallel (two at a time by default, raise it
@@ -243,6 +247,11 @@ original must stay in place, use "Add by path" instead.
   encodes are slower than GIFs but far smaller at the same quality.
   The sharable AVIF copy shrinks the same way as the sharable GIF -
   size and frame rate first, then quality.
+- The sharable copy of a combined highlights file is a second encode of
+  the finished file (fixed 30fps, longest edge 768/512/256, never
+  upscaled, 48MB cap, audio at 96k). When even the smallest size
+  exceeds the cap, the full file is kept and the job shows a warning
+  instead of failing.
 - Session data (loaded videos, clip lists, job history, new-clip
   defaults) lives in `.data/`; running jobs are not resumable after a
   server restart.

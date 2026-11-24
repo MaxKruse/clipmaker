@@ -50,9 +50,12 @@ src/lib/clips.ts    client-side sanitizers: toClip (untrusted clip -> ClipSpec) 
                     toDefaults (untrusted defaults -> ClipDefaults, field-wise
                     fallback to the shipped defaults)
 src/lib/combine.ts  same-name grouping (groupCombine), combo math (duration,
-                    0.5s fades, target size) for the MP4 highlights combine
+                    0.5s fades, target size) for the MP4 highlights combine,
+                    plus the sharable-tier ladder (comboShareRungs: fixed
+                    768/512/256 longest-edge rungs capped at the full tier;
+                    COMBO_SHARE_FPS/CRF/MAX_MB)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
-                    combo cut, concat)
+                    combo cut, combo sharable re-encode, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) -
                     server-only (node:path); the client imports jobs.ts
@@ -166,7 +169,10 @@ Key invariants:
   name, size, tier?: "full" | "sharable" }` for files under the video's
   `out/<videoId>/`, plus the `<date>` subfolder for dated
   ids (`name` may be a relative path like
-  `sharable/clip1-note.gif`; `tier` is absent on old jobs).
+  `sharable/clip1-note.gif`; `tier` is absent on old jobs). Combined
+  jobs push the full highlights file (`tier: "full"`) and, when the
+  sharable ladder fits, `sharable/<note>-highlights.mp4`
+  (`tier: "sharable"`).
 - `Job.stage` is null when the job settles, including on error.
 
 ## Disk layout (all gitignored, created lazily)
@@ -264,6 +270,18 @@ Key invariants:
   `<note>-highlights.mp4` (`highlightsFileName` in names.ts) - never a
   `clipN-` name, so it can never collide with a part's own mp4
   (part #N owns `clipN-note.mp4` and exports alongside it).
+  **Sharable tier** (stage `mp4-share-rung`, an ADDITION to the full
+  file): the finished highlights mp4 is re-encoded rung by rung
+  (top-down) at a fixed 30fps, its longest edge scaled to one rung of
+  `comboShareRungs` (768/512/256, capped at the full tier's longest
+  edge, even-floored, deduped; a portrait group scales the height), a
+  quality-based encode (x264 crf20 / nvenc **constqp** cq20 - this
+  nvenc build has no `crf` rc value), 96k aac when the group has audio
+  (192k alone would blow the cap on long files), and the first file
+  under the 48MB cap (`COMBO_SHARE_MAX_MB`) wins:
+  `sharable/<note>-highlights.mp4`. Unlike the gif/avif ladders this
+  runs AFTER the full tier is on disk, so a cap miss is a `job.warning`
+  (no sharable copy) instead of a failed job.
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -643,10 +661,18 @@ Key invariants:
   local video paths and the local NVENC GPU. Long-lived processes must
   be killed by PID, never by image name. The optimized version is
   `bun run prod` (`next build` then `next start`, same :10100 port).
+- **In dev mode, each API route's first lazy compile re-initializes the
+  store and runner modules** (one module registry per route - verified
+  with a module-scope init marker): an export enqueued via `/api/export`
+  runs to completion and writes its files, but `/api/jobs` serves its
+  own registry's store, which healed the still-running jobs as "server
+  restarted before the job finished" at its own init. Export e2e
+  verification must run against `bun run prod` (one server bundle, one
+  store), where jobs poll live.
 
 ## Verification
 
-- `bun test` - 264 unit tests over the pure libs (times, bitrate,
+- `bun test` - 273 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, range, ffmpeg's once).
@@ -657,7 +683,10 @@ Key invariants:
   gif/avif at source resolution uncapped, sharable tier's longest edge at
   maxEdge (or the crop's longest edge when smaller) within the size cap,
   avif codec `av1`) and confirm
-  `GET /api/videos/<id>/file` answers 206 for a Range request.
+  `GET /api/videos/<id>/file` answers 206 for a Range request. A
+  combined export additionally writes `sharable/<note>-highlights.mp4`
+  (30fps, longest edge at the first fitting rung of 768/512/256, under
+  48MB). Run against `bun run prod` - see the dev-mode store gotcha.
 - Ingest: drop a file into `ingest/` and refresh - it is moved into
   `uploads/<videoId>/`, registered (banner + auto-selected); a file
   still being written reports pending and ingests on the next refresh;
