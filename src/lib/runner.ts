@@ -260,10 +260,13 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
 
   const encoder = await pickEncoder();
   const kbit = resolveOutKbit(video, fps, first.quality);
-  // <note>-highlights.mp4, NOT clipN-...: the parts export individually
-  // alongside this file (part #N would own clipN-<note>.mp4).
+  // highlights/<note>-highlights.mp4, NOT clipN-...: the parts export
+  // individually alongside this file (part #N would own clipN-<note>.mp4).
+  // The combined file sits in its own highlights/ folder in the export dir.
   const outName = highlightsFileName(first.note);
-  const outPath = path.join(outDir, outName);
+  const highlightsDir = path.join(outDir, "highlights");
+  fs.mkdirSync(highlightsDir, { recursive: true });
+  const outPath = path.join(highlightsDir, outName);
   const concat = () =>
     runTracked(
       job,
@@ -281,7 +284,7 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   await concat();
   const warn = await checkDurationOrRetry(outPath, total, fps, job, concat);
   if (warn) job.warning = warn;
-  job.outputs.push({ kind: "mp4", name: outName, size: fs.statSync(outPath).size, tier: "full" });
+  job.outputs.push({ kind: "mp4", name: `highlights/${outName}`, size: fs.statSync(outPath).size, tier: "full" });
 
   // Sharable tier: ONE file per group - every part contributes its middle
   // section (comboShareSections: ~3 min of content total, 8-15s per part,

@@ -110,7 +110,10 @@ export interface ClipSpec {
 
 export interface JobOutput {
   kind: Format;
-  /** Path relative to out/<videoId>/; the sharable tier sits in sharable/. */
+  /**
+   * Path relative to out/<videoId>/; the sharable tier sits in sharable/,
+   * the combined highlights file in highlights/.
+   */
   name: string;
   size: number;
   /** "full" = full-quality/full-res original, "sharable" = size-capped copy. */

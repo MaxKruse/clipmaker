@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import path from "node:path";
-import { outputsGone } from "../src/lib/jobFiles";
+import { outputsGone, safeOutputName } from "../src/lib/jobFiles";
 import { defaultClip, type Job, type JobOutput } from "../src/lib/types";
 
 const job = (id: string, clipNo: number, createdAt: number): Job => ({
@@ -21,6 +21,24 @@ const out = (kind: JobOutput["kind"], name: string, tier?: JobOutput["tier"]): J
   name,
   size: 1,
   tier,
+});
+
+describe("safeOutputName", () => {
+  test("accepts bare names and the sharable/ and highlights/ subfolders", () => {
+    expect(safeOutputName("clip1-note.mp4")).toBe(true);
+    expect(safeOutputName("Dance-highlights.mp4")).toBe(true);
+    expect(safeOutputName("sharable/clip1-1024.gif")).toBe(true);
+    expect(safeOutputName("highlights/Dance-highlights.mp4")).toBe(true);
+  });
+
+  test("rejects escapes, deep paths, unknown subfolders, and empty names", () => {
+    expect(safeOutputName("..")).toBe(false);
+    expect(safeOutputName("sharable/../clip1.mp4")).toBe(false);
+    expect(safeOutputName("/abs.mp4")).toBe(false);
+    expect(safeOutputName("sharable/deep/file.mp4")).toBe(false);
+    expect(safeOutputName("other/file.mp4")).toBe(false);
+    expect(safeOutputName("")).toBe(false);
+  });
 });
 
 describe("outputsGone", () => {

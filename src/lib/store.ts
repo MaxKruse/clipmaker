@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { toDefaults } from "./clips";
 import { sortJobs } from "./jobs";
-import { outputsGone } from "./jobFiles";
+import { outputsGone, safeOutputName } from "./jobFiles";
 import { defaultClipDefaults, type ClipDefaults, type ClipSpec, type Job, type VideoInfo } from "./types";
 
 // Disk-backed so state survives HMR reloads and dev-server restarts.
@@ -24,13 +24,6 @@ export const TMP_DIR = path.join(process.cwd(), ".tmp");
 export const INGEST_DIR = process.env.CLIPMAKER_INGEST_DIR
   ? path.resolve(process.env.CLIPMAKER_INGEST_DIR)
   : path.join(process.cwd(), "ingest");
-
-/** Only a bare output name, or one under sharable/, may reach the out dir. */
-function safeOutputName(name: string): boolean {
-  if (!name || name.includes("..") || name.startsWith("/")) return false;
-  const parts = name.split("/");
-  return parts.length <= 2 && (parts.length === 1 || parts[0] === "sharable");
-}
 
 class Store {
   videos = new Map<string, VideoInfo>();
