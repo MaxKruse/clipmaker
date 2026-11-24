@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
   COMBO_FADE_SECONDS,
+  COMBO_SHARE_FPS,
+  COMBO_SHARE_MAX_MB,
   comboDuration,
   comboFade,
+  comboShareRungs,
   comboTarget,
   groupCombine,
 } from "../src/lib/combine";
@@ -94,5 +97,40 @@ describe("comboTarget", () => {
     const second = clip({ note: "a", crop: null });
     expect(comboTarget([first, second], VIDEO)).toEqual({ w: 640, h: 360 });
     expect(comboTarget([second, first], VIDEO)).toEqual({ w: 1920, h: 1080 });
+  });
+});
+
+describe("sharable combined tier", () => {
+  test("constants: 30fps fixed, 48MB cap", () => {
+    expect(COMBO_SHARE_FPS).toBe(30);
+    expect(COMBO_SHARE_MAX_MB).toBe(48);
+  });
+});
+
+describe("comboShareRungs", () => {
+  test("full 1080p tier: the three fixed edges, highest quality first", () => {
+    expect(comboShareRungs(1920, 1080)).toEqual([768, 512, 256]);
+  });
+
+  test("never upscales: a 480p tier starts at its own longest edge", () => {
+    expect(comboShareRungs(480, 270)).toEqual([480, 256]);
+    expect(comboShareRungs(256, 144)).toEqual([256]);
+  });
+
+  test("a tier between two fixed edges is prepended and deduped", () => {
+    expect(comboShareRungs(700, 394)).toEqual([700, 512, 256]);
+  });
+
+  test("below the smallest rung: a single rung at the full edge", () => {
+    expect(comboShareRungs(200, 112)).toEqual([200]);
+  });
+
+  test("odd full edges are even-floored", () => {
+    expect(comboShareRungs(701, 393)).toEqual([700, 512, 256]);
+    expect(comboShareRungs(257, 144)).toEqual([256]);
+  });
+
+  test("a portrait frame is driven by its longest edge (height)", () => {
+    expect(comboShareRungs(400, 800)).toEqual([768, 512, 256]);
   });
 });

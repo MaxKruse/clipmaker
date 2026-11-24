@@ -1,3 +1,4 @@
+import { evenFloor } from "./ladder";
 import { frameAt } from "./times";
 import type { ClipSpec, VideoInfo } from "./types";
 
@@ -68,4 +69,33 @@ export function comboDuration(clips: ClipSpec[], videoFps: number): number {
 export function comboTarget(clips: ClipSpec[], video: VideoInfo): { w: number; h: number } {
   const crop = clips[0].crop;
   return crop ? { w: crop.w, h: crop.h } : { w: video.width, h: video.height };
+}
+
+// The sharable combined tier: the finished highlights file re-encoded
+// small and compact so it can be shared (e.g. chat) - fixed 30fps, the
+// longest edge at one of the fixed rungs, the first rung that lands
+// under the cap wins.
+/** Fixed frame rate of the sharable combined file (the full tier keeps the group fps). */
+export const COMBO_SHARE_FPS = 30;
+/** Size cap of the sharable combined file, in MB. */
+export const COMBO_SHARE_MAX_MB = 48;
+/** CRF of the sharable combined file (quality-based, so a smaller rung is a smaller file). */
+export const COMBO_SHARE_CRF = 20;
+/** Longest-edge rungs of the sharable combined file, highest quality first. */
+export const COMBO_SHARE_EDGES = [768, 512, 256];
+
+/**
+ * Ladder rungs of the sharable combined file: the fixed edges scaled to
+ * the frame's LONGEST edge, capped at the full tier's longest edge (never
+ * upscale), even-floored, descending and deduped - a 480p tier starts at
+ * 480 instead of re-trying 768, and a 700p tier prepends its own edge.
+ */
+export function comboShareRungs(w: number, h: number): number[] {
+  const cap = evenFloor(Math.max(w, h));
+  const rungs: number[] = [];
+  for (const e of COMBO_SHARE_EDGES) {
+    const rung = Math.min(e, cap);
+    if (rungs[rungs.length - 1] !== rung) rungs.push(rung);
+  }
+  return rungs;
 }
