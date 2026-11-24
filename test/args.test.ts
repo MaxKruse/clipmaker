@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildAvifArgs,
+  buildComboShareArgs,
   buildConcatArgs,
   buildComboCutArgs,
   buildGifPaletteArgs,
@@ -294,5 +295,52 @@ describe("buildConcatArgs", () => {
     expect(args[args.indexOf("-b:v") + 1]).toBe("1234k");
     expect(args).toContain("-an");
     expect(args).not.toContain("-c:a");
+  });
+});
+
+describe("buildComboShareArgs", () => {
+  test("x264, width axis, audio: scale to the rung, fixed 30fps, crf, 96k aac", () => {
+    expect(
+      buildComboShareArgs({
+        in: "in.mp4",
+        out: "out.mp4",
+        fps: 30,
+        edge: 768,
+        axis: "w",
+        encoder: "libx264",
+        crf: 20,
+        audio: true,
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-i", "in.mp4",
+      "-vf", "scale=768:-2:flags=lanczos,fps=30,setpts=PTS-STARTPTS",
+      "-c:v", "libx264", "-preset", "slow", "-crf", "20", "-profile:v", "high",
+      "-c:a", "aac", "-b:a", "96k", "-ar", "48000",
+      "-movflags", "+faststart", "out.mp4",
+    ]);
+  });
+
+  test("nvenc, height axis, no audio: crf-mode nvenc, -an", () => {
+    expect(
+      buildComboShareArgs({
+        in: "in.mp4",
+        out: "out.mp4",
+        fps: 30,
+        edge: 512,
+        axis: "h",
+        encoder: "h264_nvenc",
+        crf: 20,
+        audio: false,
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-i", "in.mp4",
+      "-vf", "scale=-2:512:flags=lanczos,fps=30,setpts=PTS-STARTPTS",
+      "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "constqp",
+      "-cq", "20", "-profile:v", "high",
+      "-an",
+      "-movflags", "+faststart", "out.mp4",
+    ]);
   });
 });

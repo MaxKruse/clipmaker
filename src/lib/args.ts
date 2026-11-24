@@ -236,6 +236,48 @@ export function buildComboCutArgs(s: {
 }
 
 /**
+ * Sharable combined tier: the finished highlights mp4 re-encoded at a
+ * fixed 30fps, its longest edge scaled to one ladder rung (never
+ * upscaled by the caller), CRF so a smaller rung is a smaller file, and
+ * a lighter 96k aac track (192k alone would blow the cap on long files).
+ * Audio is re-encoded (never copied) so the cap covers the whole file.
+ */
+export function buildComboShareArgs(s: {
+  in: string;
+  out: string;
+  fps: number;
+  edge: number;
+  axis: "w" | "h";
+  encoder: Mp4Encoder;
+  crf: number;
+  audio: boolean;
+}): string[] {
+  const scale =
+    s.axis === "h"
+      ? `scale=-2:${s.edge}:flags=lanczos`
+      : `scale=${s.edge}:-2:flags=lanczos`;
+  const a = [
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+    "-i", s.in,
+    "-vf", `${scale},fps=${s.fps},setpts=PTS-STARTPTS`,
+  ];
+  if (s.encoder === "h264_nvenc") {
+    // This encoder's quality-based mode is constqp (no "crf" rc value -
+    // -cq there is the constant QP, the same quality knob as x264's crf).
+    a.push(
+      "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "constqp",
+      "-cq", String(s.crf), "-profile:v", "high",
+    );
+  } else {
+    a.push("-c:v", "libx264", "-preset", "slow", "-crf", String(s.crf), "-profile:v", "high");
+  }
+  if (s.audio) a.push("-c:a", "aac", "-b:a", "96k", "-ar", "48000");
+  else a.push("-an");
+  a.push("-movflags", "+faststart", s.out);
+  return a;
+}
+
+/**
  * Concatenate pre-cut combined-export parts (concat demuxer list) into
  * the final mp4, re-encoded with the mp4 recipe (same encoder + bitrate
  * control as a single-clip export). Re-encoding (never stream-copy)
