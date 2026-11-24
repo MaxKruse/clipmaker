@@ -62,13 +62,19 @@ export function comboDuration(clips: ClipSpec[], videoFps: number): number {
 }
 
 /**
- * Target frame of the combined file: the FIRST clip's effective size
- * (its crop when cropped, else the source). Every part is scaled/padded
- * to it, so the concat never mixes resolutions.
+ * Target frame of the combined file: the LARGEST clip's effective size
+ * (its crop when cropped, else the source), by area - the biggest part
+ * keeps its own size and every smaller part is scaled/padded to it, so
+ * the concat never mixes resolutions and never upscales the form-giving
+ * part. Equal areas: the earlier clip in list order wins.
  */
 export function comboTarget(clips: ClipSpec[], video: VideoInfo): { w: number; h: number } {
-  const crop = clips[0].crop;
-  return crop ? { w: crop.w, h: crop.h } : { w: video.width, h: video.height };
+  let best: { w: number; h: number } | null = null;
+  for (const c of clips) {
+    const t = c.crop ? { w: c.crop.w, h: c.crop.h } : { w: video.width, h: video.height };
+    if (!best || t.w * t.h > best.w * best.h) best = t;
+  }
+  return best!;
 }
 
 // The sharable combined tier: the finished highlights file re-encoded

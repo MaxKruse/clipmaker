@@ -254,8 +254,11 @@ Key invariants:
   enqueues): per part (stage
   `combo-cut: part i/n`) a segment `tmp/seg-i.mp4` is cut at the part's
   floored frame with `buildComboCutArgs`: crop (if any) then
-  scale/pad to the group's target size (`comboTarget` = first clip's
-  crop-or-source size, so every part is the same size), `fps=N`,
+  scale/pad to the group's target size (`comboTarget` = the LARGEST
+  clip's crop-or-source size, by area - ties: list order - so the
+  biggest part keeps its own frame and every part lands in the same
+  size; same-aspect parts are scaled to fill it, different-aspect
+  parts are centered with letterbox/pillarbox padding), `fps=N`,
   `fade=in`/`fade=out` over `comboFade(dur) = min(0.5s, dur/2)`,
   `setpts=PTS-STARTPTS`, libx264 ultrafast crf14 (the segments need to
   concat frame-accurate). Audio is per part: source audio with matching

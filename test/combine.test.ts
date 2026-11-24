@@ -92,11 +92,33 @@ describe("comboDuration", () => {
 });
 
 describe("comboTarget", () => {
-  test("the first clip's effective size: crop when cropped, else the source", () => {
-    const first = clip({ note: "a", crop: { x: 100, y: 50, w: 640, h: 360 } });
-    const second = clip({ note: "a", crop: null });
-    expect(comboTarget([first, second], VIDEO)).toEqual({ w: 640, h: 360 });
-    expect(comboTarget([second, first], VIDEO)).toEqual({ w: 1920, h: 1080 });
+  test("the LARGEST clip's effective size is form-giving, in either order", () => {
+    const cropped = clip({ note: "a", crop: { x: 100, y: 50, w: 640, h: 360 } });
+    const full = clip({ note: "a", crop: null });
+    expect(comboTarget([cropped, full], VIDEO)).toEqual({ w: 1920, h: 1080 });
+    expect(comboTarget([full, cropped], VIDEO)).toEqual({ w: 1920, h: 1080 });
+  });
+
+  test("a crop larger than the source frame defines the target", () => {
+    const bigCrop = clip({ note: "a", crop: { x: 0, y: 0, w: 1920, h: 1080 } });
+    const smallCrop = clip({ note: "a", crop: { x: 100, y: 50, w: 640, h: 360 } });
+    expect(comboTarget([smallCrop, bigCrop], VIDEO)).toEqual({ w: 1920, h: 1080 });
+    expect(comboTarget([bigCrop, smallCrop], VIDEO)).toEqual({ w: 1920, h: 1080 });
+  });
+
+  test("largest by area, not by longest edge", () => {
+    const strip = clip({ note: "a", crop: { x: 0, y: 0, w: 1920, h: 300 } });
+    const square = clip({ note: "a", crop: { x: 0, y: 0, w: 900, h: 900 } });
+    // 900x900 (810k) beats 1920x300 (576k) despite the shorter longest edge
+    expect(comboTarget([strip, square], VIDEO)).toEqual({ w: 900, h: 900 });
+    expect(comboTarget([square, strip], VIDEO)).toEqual({ w: 900, h: 900 });
+  });
+
+  test("equal area: the earlier clip in list order wins", () => {
+    const wide = clip({ note: "a", crop: { x: 0, y: 0, w: 1280, h: 360 } });
+    const other = clip({ note: "a", crop: { x: 0, y: 0, w: 720, h: 640 } });
+    expect(comboTarget([wide, other], VIDEO)).toEqual({ w: 1280, h: 360 });
+    expect(comboTarget([other, wide], VIDEO)).toEqual({ w: 720, h: 640 });
   });
 });
 
