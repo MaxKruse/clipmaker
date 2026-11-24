@@ -39,17 +39,6 @@ export function highlightsFileName(note: string): string {
 }
 
 /**
- * Part of a multi-part sharable highlights file:
- * `<note>-highlights-<n>.mp4`. A long combined file is split into
- * consecutive sharable parts, each its own file; the single-file name
- * (highlightsFileName) carries no part suffix, so the two never collide.
- */
-export function highlightsPartFileName(note: string, n: number): string {
-  const t = sanitizeNote(note);
-  return `${t ? `${t}-highlights` : "highlights"}-${n}.mp4`;
-}
-
-/**
  * Content-disposition header for a download. RFC 6266: the plain
  * `filename=` gets an ASCII-only fallback (non-ASCII dropped, quotes and
  * backslashes removed, "download" when nothing is left), and the real

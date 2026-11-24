@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildAvifArgs,
   buildComboShareArgs,
-  buildComboSharePartArgs,
+  buildComboShareSectionArgs,
   buildConcatArgs,
   buildComboCutArgs,
   buildGifPaletteArgs,
@@ -299,14 +299,81 @@ describe("buildConcatArgs", () => {
   });
 });
 
+describe("buildComboShareSectionArgs", () => {
+  test("source audio: seek the middle, 30fps, fades on both edges, fast intermediate", () => {
+    expect(
+      buildComboShareSectionArgs({
+        in: "seg.mp4",
+        out: "sec.mp4",
+        ss: 76.2,
+        dur: 10.5,
+        fps: 30,
+        fade: 0.5,
+        audio: "source",
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-ss", "76.2", "-i", "seg.mp4",
+      "-vf", "fps=30,fade=t=in:st=0:d=0.5,fade=t=out:st=10:d=0.5,setpts=PTS-STARTPTS",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p",
+      "-af", "afade=t=in:st=0:d=0.5,afade=t=out:st=10:d=0.5",
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+      "-t", "10.5", "sec.mp4",
+    ]);
+  });
+
+  test("silent part: a silent aac track keeps the concat uniform, no afade", () => {
+    expect(
+      buildComboShareSectionArgs({
+        in: "seg.mp4",
+        out: "sec.mp4",
+        ss: 0,
+        dur: 15,
+        fps: 30,
+        fade: 0.5,
+        audio: "silent",
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-ss", "0", "-i", "seg.mp4",
+      "-f", "lavfi", "-t", "15", "-i", "anullsrc=r=48000:cl=stereo",
+      "-vf", "fps=30,fade=t=in:st=0:d=0.5,fade=t=out:st=14.5:d=0.5,setpts=PTS-STARTPTS",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+      "-t", "15", "sec.mp4",
+    ]);
+  });
+
+  test("a group without audio: -an", () => {
+    expect(
+      buildComboShareSectionArgs({
+        in: "seg.mp4",
+        out: "sec.mp4",
+        ss: 5,
+        dur: 8,
+        fps: 30,
+        fade: 0.5,
+        audio: "none",
+      }),
+    ).toEqual([
+      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+      "-ss", "5", "-i", "seg.mp4",
+      "-vf", "fps=30,fade=t=in:st=0:d=0.5,fade=t=out:st=7.5:d=0.5,setpts=PTS-STARTPTS",
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p",
+      "-an",
+      "-t", "8", "sec.mp4",
+    ]);
+  });
+});
+
 describe("buildComboShareArgs", () => {
-  test("x264, width axis, audio: scale to the rung, fixed 30fps, crf, 96k aac", () => {
+  test("x264, width axis, audio: sections concat-demuxed, scale to the rung, crf, 96k aac", () => {
     expect(
       buildComboShareArgs({
-        in: "in.mp4",
+        list: "list.txt",
         out: "out.mp4",
         fps: 30,
-        edge: 768,
+        edge: 1080,
         axis: "w",
         encoder: "libx264",
         crf: 20,
@@ -314,8 +381,8 @@ describe("buildComboShareArgs", () => {
       }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-      "-i", "in.mp4",
-      "-vf", "scale=768:-2:flags=lanczos,fps=30,setpts=PTS-STARTPTS",
+      "-f", "concat", "-safe", "0", "-i", "list.txt",
+      "-vf", "scale=1080:-2:flags=lanczos,fps=30,setpts=PTS-STARTPTS",
       "-c:v", "libx264", "-preset", "slow", "-crf", "20", "-profile:v", "high",
       "-c:a", "aac", "-b:a", "96k", "-ar", "48000",
       "-movflags", "+faststart", "out.mp4",
@@ -325,7 +392,7 @@ describe("buildComboShareArgs", () => {
   test("nvenc, height axis, no audio: crf-mode nvenc, -an", () => {
     expect(
       buildComboShareArgs({
-        in: "in.mp4",
+        list: "list.txt",
         out: "out.mp4",
         fps: 30,
         edge: 512,
@@ -336,38 +403,12 @@ describe("buildComboShareArgs", () => {
       }),
     ).toEqual([
       "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-      "-i", "in.mp4",
+      "-f", "concat", "-safe", "0", "-i", "list.txt",
       "-vf", "scale=-2:512:flags=lanczos,fps=30,setpts=PTS-STARTPTS",
       "-c:v", "h264_nvenc", "-preset", "p5", "-tune", "hq", "-rc", "constqp",
       "-cq", "20", "-profile:v", "high",
       "-an",
       "-movflags", "+faststart", "out.mp4",
-    ]);
-  });
-});
-
-describe("buildComboSharePartArgs", () => {
-  test("stream-copy video concat, audio re-encoded to one track", () => {
-    expect(
-      buildComboSharePartArgs({ list: "list.txt", out: "part.mp4", audio: true }),
-    ).toEqual([
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-      "-f", "concat", "-safe", "0", "-i", "list.txt",
-      "-c:v", "copy",
-      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
-      "-movflags", "+faststart", "part.mp4",
-    ]);
-  });
-
-  test("a group without audio: -an", () => {
-    expect(
-      buildComboSharePartArgs({ list: "list.txt", out: "part.mp4", audio: false }),
-    ).toEqual([
-      "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-      "-f", "concat", "-safe", "0", "-i", "list.txt",
-      "-c:v", "copy",
-      "-an",
-      "-movflags", "+faststart", "part.mp4",
     ]);
   });
 });

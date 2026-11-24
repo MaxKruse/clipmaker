@@ -39,9 +39,8 @@ src/lib/times.ts    time parsing/formatting + frameAt + formatClipTime + clip fo
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit + resolveOutKbit (manual vs source)
 src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf) + sharableCap (maxEdge vs the full tier's longest edge, and the scale axis)
 src/lib/names.ts    safe output file names (clip1-note.mp4, highlightsFileName for
-                    combined <note>-highlights.mp4, highlightsPartFileName for the
-                    multi-part sharable <note>-highlights-<n>.mp4) + RFC 6266
-                    disposition for downloads
+                    combined <note>-highlights.mp4) + RFC 6266 disposition for
+                    downloads
 src/lib/vodDate.ts  broadcast date in a VOD file name -> dated video id
                     (<date>_<random> via newVideoId) + dateFromVideoId (id -> date)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
@@ -53,15 +52,16 @@ src/lib/clips.ts    client-side sanitizers: toClip (untrusted clip -> ClipSpec) 
                     fallback to the shipped defaults)
 src/lib/combine.ts  same-name grouping (groupCombine), combo math (duration,
                     0.5s fades, target size) for the MP4 highlights combine,
-                    plus the sharable-tier ladder (comboShareRungs: fixed
-                    768/512/256 longest-edge rungs capped at the full tier;
-                    COMBO_SHARE_FPS/CRF/MAX_MB) and part packing for long
-                    files (comboShareGroups: consecutive parts at most
-                    COMBO_SHARE_PART_SECONDS = 120s each - one group = the
-                    single-file path, several = the multi-part tier)
+                    plus the sharable-tier ladder (comboShareRungs: the
+                    full tier's own longest edge first, then the fixed
+                    1080/768/512/256, even-floored; COMBO_SHARE_FPS/CRF/
+                    MAX_MB) and the middle-section
+                    rule (comboShareSections: ~180s of content total, 8-15s
+                    per part by part count, a shorter part gives its whole
+                    length)
 src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
-                    combo cut, combo sharable re-encode, combo share-part
-                    stream-copy concat, concat)
+                    combo cut, combo share-section middle cut, combo
+                    sharable re-encode, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
 src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) -
                     server-only (node:path); the client imports jobs.ts
@@ -178,10 +178,8 @@ Key invariants:
   `sharable/clip1-note.gif`; `tier` is absent on old jobs). Combined
   jobs push the full highlights file (`tier: "full"`) and, when the
   sharable ladder fits, `sharable/<note>-highlights.mp4`
-  (`tier: "sharable"`) - or, when the combined file is longer than
-  COMBO_SHARE_PART_SECONDS, the numbered parts
-  `sharable/<note>-highlights-1.mp4`, `-2`, ... (one entry per part that
-  fits the cap).
+  (`tier: "sharable"`) - the middle-sections file, ONE entry no matter
+  how long the full tier is.
 - `Job.stage` is null when the job settles, including on error.
 
 ## Disk layout (all gitignored, created lazily)
@@ -282,31 +280,27 @@ Key invariants:
   `<note>-highlights.mp4` (`highlightsFileName` in names.ts) - never a
   `clipN-` name, so it can never collide with a part's own mp4
   (part #N owns `clipN-note.mp4` and exports alongside it).
-  **Sharable tier** (stage `mp4-share-rung`, an ADDITION to the full
-  file): the finished highlights mp4 is re-encoded rung by rung
-  (top-down) at a fixed 30fps, its longest edge scaled to one rung of
-  `comboShareRungs` (768/512/256, capped at the full tier's longest
-  edge, even-floored, deduped; a portrait group scales the height), a
-  quality-based encode (x264 crf20 / nvenc **constqp** cq20 - this
-  nvenc build has no `crf` rc value), 96k aac when the group has audio
-  (192k alone would blow the cap on long files), and the first file
-  under the 48MB cap (`COMBO_SHARE_MAX_MB`) wins:
+  **Sharable tier** (an ADDITION to the full file): ONE short file per
+  group that represents every part - each part contributes its MIDDLE
+  section (stage `mp4-share-cut`, "mp4 sharable section i/n"):
+  `comboShareSections` picks ~180s of content total (8-15s per part by
+  part count, a shorter part gives its whole length), cut from the
+  part's pre-cut segment at a fixed 30fps with its own 0.5s fade in/out
+  and the part's audio (source aac, a silent aac track, or none -
+  uniform, so the concat demuxer sees one stream). The sections are
+  then concat-demuxed straight through the rung ladder (stage
+  `mp4-share-rung`): re-encoded rung by rung (top-down) at the fixed
+  30fps, longest edge scaled to one rung of `comboShareRungs`
+  (the full tier's own longest edge first, then 1080/768/512/256 -
+  never upscaled, even-floored, deduped; a portrait group scales the
+  height), a quality-
+  based encode (x264 crf20 / nvenc **constqp** cq20 - this nvenc build
+  has no `crf` rc value), 96k aac when the group has audio, and the
+  first file under the 48MB cap (`COMBO_SHARE_MAX_MB`) wins:
   `sharable/<note>-highlights.mp4`. Unlike the gif/avif ladders this
   runs AFTER the full tier is on disk, so a cap miss is a `job.warning`
-  (no sharable copy) instead of a failed job. **Part split**: when the
-  combined file is longer than `COMBO_SHARE_PART_SECONDS` (120s), the
-  parts' cut durations are packed in order into consecutive groups of
-  at most that length (`comboShareGroups`; a part longer than the cap
-  keeps its own group) and EACH group becomes its own sharable file -
-  its segments are stream-concatenated first (stage `mp4-share-part`,
-  video copy, audio re-encoded so source-audio and silent segments land
-  on one track) and then run the same rung ladder (stage
-  `mp4-share-rung`, with the part label, e.g. "mp4 sharable part 2/4:
-  512p30 (2/3)") into `sharable/<note>-highlights-<n>.mp4`. The full
-  tier stays one file. A part that misses the cap warns ("sharable
-  highlights part n/N exceeds ..."); the full file and the other parts
-  stay. One group (file at most 120s) is the single-file path above,
-  unchanged.
+  (no sharable copy) instead of a failed job. No part splitting: the
+  full tier stays one file, the sharable tier stays one file.
 - **Encoder choice** is probed once per kind and cached in-process:
   `nvencAvailable()` (a 320x180 testsrc probe-encode) and
   `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
@@ -697,7 +691,7 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 287 unit tests over the pure libs (times, bitrate,
+- `bun test` - 285 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, range, ffmpeg's once).
@@ -710,9 +704,10 @@ Key invariants:
   avif codec `av1`) and confirm
   `GET /api/videos/<id>/file` answers 206 for a Range request. A
   combined export additionally writes `sharable/<note>-highlights.mp4`
-  (30fps, longest edge at the first fitting rung of 768/512/256, under
-  48MB) - or, for a combined file longer than 120s, the numbered parts
-  `sharable/<note>-highlights-<n>.mp4`, each at most 120s. Run against
+  (30fps, the middle-sections file: ~180s of content from 8-15s middles
+  per part, longest edge at the first fitting rung starting at the full
+  resolution, under 48MB, one file no matter how long the full tier is).
+  Run against
   `bun run prod` - see the dev-mode store gotcha.
 - Ingest: drop a file into `ingest/` and refresh - it is moved into
   `uploads/<videoId>/`, registered (banner + auto-selected); a file

@@ -236,14 +236,65 @@ export function buildComboCutArgs(s: {
 }
 
 /**
- * Sharable combined tier: the finished highlights mp4 re-encoded at a
- * fixed 30fps, its longest edge scaled to one ladder rung (never
- * upscaled by the caller), CRF so a smaller rung is a smaller file, and
- * a lighter 96k aac track (192k alone would blow the cap on long files).
- * Audio is re-encoded (never copied) so the cap covers the whole file.
+ * Sharable combined tier: one part's middle section cut from its
+ * pre-cut segment (already at the group's target size, so no crop or
+ * scale here), re-timed to the fixed sharable fps with its own
+ * intro/outro fades on both edges (fade length pre-clamped by comboFade).
+ * Same fast intermediate encode as the full-tier cuts so the section
+ * concat stays frame-accurate; the audio mirrors the part's (source aac,
+ * a silent aac track for parts muted in a group that has audio, or none).
+ */
+export function buildComboShareSectionArgs(s: {
+  in: string;
+  out: string;
+  ss: number;
+  dur: number;
+  fps: number;
+  fade: number;
+  audio: "source" | "silent" | "none";
+}): string[] {
+  const fadeOut = Math.max(0, s.dur - s.fade);
+  const vf = [
+    `fps=${s.fps}`,
+    `fade=t=in:st=0:d=${fmt(s.fade)}`,
+    `fade=t=out:st=${fmt(fadeOut)}:d=${fmt(s.fade)}`,
+    "setpts=PTS-STARTPTS",
+  ].join(",");
+  const a = [
+    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
+    "-ss", fmt(s.ss), "-i", s.in,
+  ];
+  if (s.audio === "silent") {
+    a.push("-f", "lavfi", "-t", fmt(s.dur), "-i", "anullsrc=r=48000:cl=stereo");
+  }
+  a.push("-vf", vf);
+  a.push("-c:v", "libx264", "-preset", "ultrafast", "-crf", "14", "-pix_fmt", "yuv420p");
+  if (s.audio === "source") {
+    a.push(
+      "-af", `afade=t=in:st=0:d=${fmt(s.fade)},afade=t=out:st=${fmt(fadeOut)}:d=${fmt(s.fade)}`,
+      "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+    );
+  } else if (s.audio === "silent") {
+    a.push("-c:a", "aac", "-b:a", "192k", "-ar", "48000");
+  } else {
+    a.push("-an");
+  }
+  a.push("-t", fmt(s.dur), s.out);
+  return a;
+}
+
+/**
+ * Sharable combined tier: the parts' middle sections concat-demuxed into
+ * one stream and re-encoded at a fixed 30fps, the longest edge scaled to
+ * one ladder rung (never upscaled by the caller), CRF so a smaller rung
+ * is a smaller file, and a lighter 96k aac track (192k alone would blow
+ * the cap on long files). The sections already share one size, one fps
+ * and one uniform audio track, so the concat demuxer yields one
+ * continuous stream; the audio is re-encoded (never copied) so the cap
+ * covers the whole file.
  */
 export function buildComboShareArgs(s: {
-  in: string;
+  list: string;
   out: string;
   fps: number;
   edge: number;
@@ -258,7 +309,7 @@ export function buildComboShareArgs(s: {
       : `scale=${s.edge}:-2:flags=lanczos`;
   const a = [
     "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-    "-i", s.in,
+    "-f", "concat", "-safe", "0", "-i", s.list,
     "-vf", `${scale},fps=${s.fps},setpts=PTS-STARTPTS`,
   ];
   if (s.encoder === "h264_nvenc") {
@@ -272,30 +323,6 @@ export function buildComboShareArgs(s: {
     a.push("-c:v", "libx264", "-preset", "slow", "-crf", String(s.crf), "-profile:v", "high");
   }
   if (s.audio) a.push("-c:a", "aac", "-b:a", "96k", "-ar", "48000");
-  else a.push("-an");
-  a.push("-movflags", "+faststart", s.out);
-  return a;
-}
-
-/**
- * Multi-part sharable tier: stream-concatenate one part's pre-cut
- * segments into the mp4 that feeds the rung ladder. All segments share
- * the group's video stream (one encoder, one size, one fps, and the
- * ultrafast intermediate has no B-frames), so the video is copied; the
- * audio is re-encoded (never copied) so a part mixing source-audio and
- * silent segments lands on one uniform track.
- */
-export function buildComboSharePartArgs(s: {
-  list: string;
-  out: string;
-  audio: boolean;
-}): string[] {
-  const a = [
-    "-hide_banner", "-loglevel", "error", "-nostdin", "-y", "-progress", "pipe:1",
-    "-f", "concat", "-safe", "0", "-i", s.list,
-    "-c:v", "copy",
-  ];
-  if (s.audio) a.push("-c:a", "aac", "-b:a", "192k", "-ar", "48000");
   else a.push("-an");
   a.push("-movflags", "+faststart", s.out);
   return a;

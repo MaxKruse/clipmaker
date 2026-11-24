@@ -116,12 +116,13 @@ port).
    with a 0.5s fade in and out per part, named
    `<note>-highlights.mp4` (combined files are MP4 only, no GIF/AVIF,
    and a group needs 2+ selected clips). Every combined file also gets
-   a sharable copy (`sharable/<note>-highlights.mp4`): the finished
-   file re-encoded at a fixed 30fps with the longest edge at 768, 512,
-   or 256 (the first size that fits under 48MB), small enough to send
-   over chat. A highlights file longer than 2 minutes becomes numbered
-   parts (`sharable/<note>-highlights-1.mp4`, `-2`, ...), each at most
-   2 minutes long, so even a 4-minute highlight stays sendable. The footer shows how many
+   a sharable copy (`sharable/<note>-highlights.mp4`): one short file
+   that shows a bit of every part - each part contributes its middle
+   (about 3 minutes of content total, 8-15s per part) with a fade in
+   and out, re-encoded at a fixed 30fps with the longest edge starting
+   at full resolution and stepping down 1080, 768, 512, or 256 (the
+   first size that fits under 48MB), small enough
+   to send over chat no matter how long the highlights file is. The footer shows how many
    clips and how many exports the plan produces. Unticked clips are
    skipped. "Start export" closes the plan and starts the jobs;
    several jobs run in parallel (two at a time by default, raise it
@@ -249,14 +250,15 @@ original must stay in place, use "Add by path" instead.
   encodes are slower than GIFs but far smaller at the same quality.
   The sharable AVIF copy shrinks the same way as the sharable GIF -
   size and frame rate first, then quality.
-- The sharable copy of a combined highlights file is a second encode of
-  the finished file (fixed 30fps, longest edge 768/512/256, never
-  upscaled, 48MB cap, audio at 96k). When even the smallest size
-  exceeds the cap, the full file is kept and the job shows a warning
-  instead of failing. A combined file longer than 2 minutes is split
-  into consecutive parts of at most 2 minutes each, each encoded as its
-  own sharable file (`sharable/<note>-highlights-<n>.mp4`); a part that
-  exceeds the cap warns while the full file and the other parts stay.
+- The sharable copy of a combined highlights file is not the finished
+  file shrunk - it is a condensed cut: every part contributes its
+  middle section (about 3 minutes of content total, 8-15s per part),
+  re-encoded at a fixed 30fps with the longest edge starting at full
+  resolution and stepping down 1080, 768, 512, or 256 (never upscaled,
+  48MB cap, audio at 96k). When even the
+  smallest size exceeds the cap, the full file is kept and the job
+  shows a warning instead of failing. The full highlights file itself
+  is always one file, no matter how long.
 - Session data (loaded videos, clip lists, job history, new-clip
   defaults) lives in `.data/`; running jobs are not resumable after a
   server restart.

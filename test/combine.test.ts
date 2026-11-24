@@ -3,11 +3,13 @@ import {
   COMBO_FADE_SECONDS,
   COMBO_SHARE_FPS,
   COMBO_SHARE_MAX_MB,
-  COMBO_SHARE_PART_SECONDS,
+  COMBO_SHARE_SECTION_MAX,
+  COMBO_SHARE_SECTION_MIN,
+  COMBO_SHARE_SECTION_TOTAL,
   comboDuration,
   comboFade,
-  comboShareGroups,
   comboShareRungs,
+  comboShareSections,
   comboTarget,
   groupCombine,
 } from "../src/lib/combine";
@@ -125,16 +127,18 @@ describe("comboTarget", () => {
 });
 
 describe("sharable combined tier", () => {
-  test("constants: 30fps fixed, 48MB cap, 120s max part length", () => {
+  test("constants: 30fps fixed, 48MB cap, ~3 min of 8-15s middle sections", () => {
     expect(COMBO_SHARE_FPS).toBe(30);
     expect(COMBO_SHARE_MAX_MB).toBe(48);
-    expect(COMBO_SHARE_PART_SECONDS).toBe(120);
+    expect(COMBO_SHARE_SECTION_TOTAL).toBe(180);
+    expect(COMBO_SHARE_SECTION_MIN).toBe(8);
+    expect(COMBO_SHARE_SECTION_MAX).toBe(15);
   });
 });
 
 describe("comboShareRungs", () => {
-  test("full 1080p tier: the three fixed edges, highest quality first", () => {
-    expect(comboShareRungs(1920, 1080)).toEqual([768, 512, 256]);
+  test("a 1080p tier starts at full res, then the fixed edges", () => {
+    expect(comboShareRungs(1920, 1080)).toEqual([1920, 1080, 768, 512, 256]);
   });
 
   test("never upscales: a 480p tier starts at its own longest edge", () => {
@@ -156,32 +160,48 @@ describe("comboShareRungs", () => {
   });
 
   test("a portrait frame is driven by its longest edge (height)", () => {
-    expect(comboShareRungs(400, 800)).toEqual([768, 512, 256]);
+    expect(comboShareRungs(400, 800)).toEqual([800, 768, 512, 256]);
   });
 });
 
-describe("comboShareGroups", () => {
-  test("a short file stays one group (the single-file path)", () => {
-    expect(comboShareGroups([30, 40, 30])).toEqual([[0, 1, 2]]);
+describe("comboShareSections", () => {
+  test("two parts get the 15s maximum, centered", () => {
+    expect(comboShareSections([60, 90], 60)).toEqual([
+      { ss: 22.5, dur: 15 },
+      { ss: 37.5, dur: 15 },
+    ]);
   });
 
-  test("the cap is inclusive: a file of exactly the cap stays together", () => {
-    expect(comboShareGroups([60, 60])).toEqual([[0, 1]]);
+  test("many parts hit the 8s minimum", () => {
+    const secs = comboShareSections(Array(25).fill(30), 30);
+    expect(secs).toHaveLength(25);
+    for (const s of secs) expect(s).toEqual({ ss: 11, dur: 8 });
   });
 
-  test("a 4-minute file of 60s parts splits into 120s groups", () => {
-    expect(comboShareGroups([60, 60, 60, 60])).toEqual([[0, 1], [2, 3]]);
+  test("a part count in between lands inside 8-15s", () => {
+    // 180/18 = exactly 10s per part, centered in a 30s part
+    const secs = comboShareSections(Array(18).fill(30), 30);
+    expect(secs).toHaveLength(18);
+    for (const s of secs) expect(s).toEqual({ ss: 10, dur: 10 });
   });
 
-  test("packing is greedy in part order: parts never cross a group", () => {
-    expect(comboShareGroups([90, 30, 90, 30, 90])).toEqual([[0, 1], [2, 3], [4]]);
+  test("a part shorter than its section gives its whole length", () => {
+    expect(comboShareSections([15, 5], 60)).toEqual([
+      { ss: 0, dur: 15 },
+      { ss: 0, dur: 5 },
+    ]);
   });
 
-  test("a part longer than the cap keeps its own group", () => {
-    expect(comboShareGroups([150, 30, 30])).toEqual([[0], [1, 2]]);
+  test("section starts floor to the frame grid", () => {
+    // (16-15)/2 = 0.5s is between 25fps frames; the first frame at/after
+    // it is 0.48s
+    expect(comboShareSections([16, 16], 25)).toEqual([
+      { ss: 0.48, dur: 15 },
+      { ss: 0.48, dur: 15 },
+    ]);
   });
 
-  test("no parts, no groups", () => {
-    expect(comboShareGroups([])).toEqual([]);
+  test("no parts, no sections", () => {
+    expect(comboShareSections([], 30)).toEqual([]);
   });
 });

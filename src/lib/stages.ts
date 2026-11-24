@@ -9,8 +9,8 @@ export type JobStage =
   | { id: "combo-cut"; index: number; total: number }
   | { id: "mp4-encode"; encoder: string; kbit: number; fps: number }
   | { id: "mp4-retry" }
-  | { id: "mp4-share-part"; index: number; total: number }
-  | { id: "mp4-share-rung"; edge: number; fps: number; index: number; total: number; part?: number; partTotal?: number }
+  | { id: "mp4-share-cut"; index: number; total: number }
+  | { id: "mp4-share-rung"; edge: number; fps: number; index: number; total: number }
   | { id: "anim-cut" }
   | { id: "gif-palette" }
   | { id: "gif-full"; edge: number; fps: number }
@@ -32,12 +32,10 @@ export function stageText(s: JobStage): string {
       return `mp4 ${s.encoder} ${s.kbit}k ${s.fps}fps`;
     case "mp4-retry":
       return "mp4 retry";
-    case "mp4-share-part":
-      return `mp4 sharable part ${s.index}/${s.total}`;
+    case "mp4-share-cut":
+      return `mp4 sharable section ${s.index}/${s.total}`;
     case "mp4-share-rung":
-      return s.part
-        ? `mp4 sharable part ${s.part}/${s.partTotal}: ${s.edge}p${s.fps} (${s.index}/${s.total})`
-        : `mp4 sharable ${s.edge}p${s.fps} (${s.index}/${s.total})`;
+      return `mp4 sharable ${s.edge}p${s.fps} (${s.index}/${s.total})`;
     case "anim-cut":
       return "anim: cut (full-res)";
     case "gif-palette":
