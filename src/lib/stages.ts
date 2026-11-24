@@ -9,6 +9,7 @@ export type JobStage =
   | { id: "combo-cut"; index: number; total: number }
   | { id: "mp4-encode"; encoder: string; kbit: number; fps: number }
   | { id: "mp4-retry" }
+  | { id: "mp4-share-rung"; edge: number; fps: number; index: number; total: number }
   | { id: "anim-cut" }
   | { id: "gif-palette" }
   | { id: "gif-full"; edge: number; fps: number }
@@ -30,6 +31,8 @@ export function stageText(s: JobStage): string {
       return `mp4 ${s.encoder} ${s.kbit}k ${s.fps}fps`;
     case "mp4-retry":
       return "mp4 retry";
+    case "mp4-share-rung":
+      return `mp4 sharable ${s.edge}p${s.fps} (${s.index}/${s.total})`;
     case "anim-cut":
       return "anim: cut (full-res)";
     case "gif-palette":
