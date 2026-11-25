@@ -61,14 +61,7 @@ export function parseClipsTxt(
   return { sections, skipped };
 }
 
-/**
- * Serialize clips for a video back into clips.txt format: a
- * `# <video name>` header (the sectionForVideo contract on re-import)
- * plus one `<start> - <end> <note?>` line per clip, sub-second
- * precision kept. Notes are flattened to one line so a stored note can
- * never break the line grammar. The round trip
- * parseClipsTxt(clipsTxtForVideo(...)) is pinned by the tests.
- */
+/** One clip line of the clips.txt grammar. */
 type ClipLine = { start: number; end: number; note: string };
 
 /** One `<start> - <end> <note?>` line per clip, sub-second precision kept.
@@ -81,10 +74,6 @@ function clipLines(clips: ClipLine[]): string[] {
     lines.push(note ? `${formatClipTime(c.start)} - ${formatClipTime(c.end)} ${note}` : `${formatClipTime(c.start)} - ${formatClipTime(c.end)}`);
   }
   return lines;
-}
-
-export function clipsTxtForVideo(videoName: string, clips: ClipLine[]): string {
-  return [`# ${videoName}`, ...clipLines(clips)].join("\n") + "\n";
 }
 
 /**

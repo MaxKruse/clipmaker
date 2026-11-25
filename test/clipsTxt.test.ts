@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { clipsTxtForVideo, parseClipsTxt, sectionForVideo, timestampsForVideo } from "../src/lib/clipsTxt";
+import { parseClipsTxt, sectionForVideo, timestampsForVideo } from "../src/lib/clipsTxt";
 
 describe("parseClipsTxt", () => {
   test("parses m:ss ranges with notes", () => {
@@ -50,44 +50,27 @@ describe("parseClipsTxt", () => {
   });
 });
 
-describe("clipsTxtForVideo", () => {
-  test("writes a # header and one line per clip", () => {
-    const text = clipsTxtForVideo("twitch_vod_2026-10-21.mp4", [
-      { start: 887, end: 922, note: "Cute" },
-      { start: 1242, end: 1258, note: "Hiding" },
-    ]);
-    expect(text).toBe(
-      ["# twitch_vod_2026-10-21.mp4", "14:47 - 15:22 Cute", "20:42 - 20:58 Hiding", ""].join("\n"),
+describe("parseClipsTxt sub-second and note handling", () => {
+  test("keeps sub-second precision from a notes file", () => {
+    const { sections, skipped } = parseClipsTxt("# vod.mp4\n14:47.5 - 15:22.25 multi line\n");
+    expect(skipped).toBe(0);
+    expect(sections[1].clips).toEqual([{ start: 887.5, end: 922.25, note: "multi line" }]);
+  });
+
+  test("parses a full notes file section and matches sectionForVideo", () => {
+    const { sections, skipped } = parseClipsTxt(
+      "# twitch_vod_2026-10-21.mp4\n14:47 - 15:22 Cute\n20:42.5 - 20:58 Hiding\n1:01:41 - 1:02:54 Guh\n",
     );
-  });
-
-  test("omits trailing spaces for clips without a note", () => {
-    const text = clipsTxtForVideo("vod.mp4", [{ start: 10, end: 20, note: "" }]);
-    expect(text).toBe("# vod.mp4\n0:10 - 0:20\n");
-  });
-
-  test("keeps sub-second precision and newlines in notes become spaces", () => {
-    const text = clipsTxtForVideo("vod.mp4", [{ start: 887.5, end: 922.25, note: "multi\nline" }]);
-    expect(text).toBe("# vod.mp4\n14:47.5 - 15:22.25 multi line\n");
-  });
-
-  test("empty clip list yields just the header", () => {
-    expect(clipsTxtForVideo("vod.mp4", [])).toBe("# vod.mp4\n");
-  });
-
-  test("round-trips through parseClipsTxt and matches sectionForVideo", () => {
-    const clips = [
-      { start: 887, end: 922, note: "Cute" },
-      { start: 1242.5, end: 1258, note: "Hiding" },
-      { start: 3701, end: 3774, note: "Guh" },
-    ];
-    const { sections, skipped } = parseClipsTxt(clipsTxtForVideo("twitch_vod_2026-10-21.mp4", clips));
     expect(skipped).toBe(0);
     // Index 0 is the anonymous section for clips before any header.
     expect(sections).toHaveLength(2);
     expect(sections[0].clips).toHaveLength(0);
     expect(sections[1].title).toBe("twitch_vod_2026-10-21.mp4");
-    expect(sections[1].clips).toEqual(clips);
+    expect(sections[1].clips).toEqual([
+      { start: 887, end: 922, note: "Cute" },
+      { start: 1242.5, end: 1258, note: "Hiding" },
+      { start: 3701, end: 3774, note: "Guh" },
+    ]);
     expect(sectionForVideo(sections, "twitch_vod_2026-10-21.mp4")).toBe(sections[1]);
     expect(sectionForVideo(sections, "twitch_vod_2026-10-21")).toBe(sections[1]);
   });
