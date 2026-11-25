@@ -64,6 +64,18 @@ test("rejects clips shorter than 0.2s", () => {
   );
 });
 
+test("clamps a start past the video duration to the duration", () => {
+  const c = toClip({ start: 150, end: 200, formats: ["mp4"] }, v);
+  expect(c.start).toBe(100);
+  expect(c.end).toBe(100.5);
+});
+
+test("a start just before the duration keeps a real tail clip", () => {
+  const c = toClip({ start: 99.5, end: 200, formats: ["mp4"] }, v);
+  expect(c.start).toBe(99.5);
+  expect(c.end).toBe(100.5);
+});
+
 test("clamps end to the duration", () => {
   const c = toClip({ start: 99, end: 500, formats: ["mp4"] }, v);
   expect(c.end).toBe(100.5);

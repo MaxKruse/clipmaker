@@ -5,10 +5,14 @@ import { ANIM_FPS_OPTIONS, ANIM_MAX_EDGE_OPTIONS, ANIM_MAX_MB_OPTIONS, FORMAT_OP
  * Throws with a human-readable message when the clip is unusable. */
 export function toClip(raw: unknown, v: { duration: number; width: number; height: number }): ClipSpec {
   const r = raw as Record<string, any>;
-  const start = Number(r?.start);
+  let start = Number(r?.start);
   let end = Number(r?.end);
   if (!Number.isFinite(start) || !Number.isFinite(end)) throw new Error("clip needs numeric start and end");
   if (start < 0) throw new Error("clip start must be >= 0");
+  // A start past the end of the video cuts from past EOF: clamp it, so a
+  // hostile payload degrades to a tail clip (or a too-short error) instead
+  // of two wasted encodes of a garbage file.
+  start = Math.min(start, v.duration);
   // Allow a small overshoot: the element duration can differ from the probe's.
   end = Math.min(end, v.duration + 0.5);
   if (end - start < MIN_CLIP_SECONDS)
