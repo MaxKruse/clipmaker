@@ -201,9 +201,11 @@ export.
 The other direction is automatic: every time your clip list is saved,
 clipmaker writes `out/<video-id>/timestamps.txt` - one
 `<start> - <end> <note>` line per clip, sub-second timestamps included
-- in exactly this format. Copy it into your notes file (or merge it
-into a multi-video one) and it imports cleanly again. The file is
-deleted when the clip list becomes empty.
+- in exactly this format. It is also re-established whenever an export
+job for the video finishes, so deleting the export folder (or just the
+file) and re-exporting brings it back. Copy it into your notes file
+(or merge it into a multi-video one) and it imports cleanly again.
+The file is deleted when the clip list becomes empty.
 
 ## Ingest folder for huge files
 

@@ -37,7 +37,7 @@ The code is layered so that everything testable is pure:
 ```
 src/lib/times.ts    time parsing/formatting + frameAt + formatClipTime + clip focus window
 src/lib/bitrate.ts  source-kbit detection + fps-scaled target kbit + resolveOutKbit (manual vs source)
-src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs) + AVIF 3-axis ladder (edge x fps x crf) + sharableCap (maxEdge vs the full tier's longest edge, and the scale axis)
+src/lib/ladder.ts   GIF ping-pong shrink ladder (edge x fps rungs, deduped) + AVIF 3-axis ladder + sharableCap (maxEdge vs the full tier's longest edge, and the scale axis)
 src/lib/names.ts    safe output file names (clip1-note.mp4, highlightsFileName for
                     combined <note>-highlights.mp4) + RFC 6266 disposition for
                     downloads
@@ -45,7 +45,7 @@ src/lib/vodDate.ts  broadcast date in a VOD file name -> dated video id
                     (<date>_<random> via newVideoId) + dateFromVideoId (id -> date)
 src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
-                    inverse clipsTxtForVideo serializer (round trip pinned
+                    inverse timestampsForVideo serializer (round trip pinned
                     by test/clipsTxt.test.ts)
 src/lib/clips.ts    client-side sanitizers: toClip (untrusted clip -> ClipSpec) and
                     toDefaults (untrusted defaults -> ClipDefaults, field-wise
@@ -63,17 +63,21 @@ src/lib/args.ts     ffmpeg argument builders (mp4/gif/avif stages/preview,
                     combo cut, combo share-section middle cut, combo
                     sharable re-encode, concat)
 src/lib/jobs.ts     export list display order (newest batch first, clip order within)
-src/lib/jobFiles.ts outputsGone (done job whose output files are deleted) +
+src/lib/jobFiles.ts exportDir/outputPath (the ONE home of the dated export-dir
+                    path rule) + saveTimestampsMirror (timestamps.txt writer) +
+                    outputsGone (done job whose output files are deleted) +
                     safeOutputName (only a bare name, sharable/ or
                     highlights/ may reach the out dir - loadJobs drops
-                    rows carrying anything else) -
-                    server-only (node:path); the client imports jobs.ts
+                    rows carrying anything else) - server-only (node:); the
+                    client imports jobs.ts
 src/lib/stages.ts   structured export job stages (JobStage) + user-facing stage text
 src/lib/exportView.ts export view state machine (modal | pill)
 src/lib/clipSession.ts clip session state machine (preview, back position, focus, range, flow step)
 src/lib/layout.ts     resizable work-area layout (WorkLayout, LAYOUT_LIMITS, clamp, load/save with injected IO)
 src/lib/avif.ts       avifDurationLevel (length-based AVIF encode warning, 45s/60s) +
                     avifWarningText (the shared user-facing warning sentence)
+src/lib/range.ts    HTTP byte-range parsing (parseRangeHeader: 206 ranges,
+                    suffix ranges, 416 rules)
 src/lib/types.ts    VideoInfo, ClipSpec, ClipDefaults, Job, MIN_CLIP_SECONDS +
                     defaultClip(note, defaults) / defaultClipDefaults() /
                     toggleFormatIn (formats list, keeps at least one) /
@@ -83,6 +87,7 @@ src/lib/dialogStack.ts last-opened-dialog-wins Esc stack (push/pop/isTop)
       -- everything above is pure and unit-tested (test/*.test.ts) --
 src/lib/filmstrip.ts filmstrip sampling plan (pure) + server-only single-flight
                     thumbs/ generation pool + removeThumbsForVideo (DELETE route)
+                    + removeOrphanedThumbs (sweeps caches of self-healed videos)
 src/lib/ffmpeg.ts   ffmpeg/ffprobe discovery + spawn wrappers,
                     probeVideo/ProbeResult (video metadata at load), progress,
                     encoder probes (nvenc, avif; one-shot via once()), and
@@ -95,8 +100,9 @@ src/lib/ingest.ts   ingest-folder sweep: pure helpers (shouldIngest,
                     must never import it, only the videos route may)
 src/lib/store.ts    disk-backed session store (.data/) + dir constants;
                     self-heals stale rows on load (rewrites the JSON files)
-src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job); runCombined is the combined-MP4 pipeline for jobs with job.clips
-src/app/api/**      thin route handlers over store/runner
+src/lib/runner.ts   bounded export job pool (CLIPMAKER_CONCURRENCY, default 2; the only ffmpeg caller) + cancelJob (the only way to interrupt a queued/running job); runCombined is the combined-MP4 pipeline for jobs with job.clips; a DONE job re-establishes the video's timestamps.txt mirror (saveTimestampsMirror, best-effort)
+src/app/api/**      thin route handlers over store/runner (GET /api/videos
+                    also sweeps orphaned filmstrip caches)
 src/components/**   UI, all "use client"; useExportView.ts is the thin hook
                     around the exportView reducer; Dialog.tsx is the
                     shared modal chrome (backdrop, stacked Esc, focus);
@@ -128,6 +134,17 @@ Key invariants:
   ffmpeg quirk) - parsing it as ms pins the bar at the 0.99 clamp for
   the whole stage. Every encode builder must carry `-progress pipe:1`,
   so each stage reports its own progress.
+- **The export-dir path rule has exactly one home**: `exportDir` /
+  `outputPath` (jobFiles.ts) - dated ids get a subfolder of just that
+  date under the video folder. The runner, the download route, and
+  `outputsGone` all resolve through it. `timestamps.txt` is NOT in that
+  folder: it always sits at the video root, and is rewritten by the
+  clips PUT route on every save AND by the runner after every done job
+  (`saveTimestampsMirror`, best-effort) - so deleting the export folder
+  (or just the file) and re-exporting brings the mirror back.
+- **Duration checks share one tolerance**: `DURATION_TOLERANCE_FRAMES`
+  (1.5 frames of the OUTPUT fps) in runner.ts, used by the full-tier
+  check (miss = one retry) and the sharable check (miss = warning).
 - **Job stages are structured, not free strings.** The runner builds
   `JobStage` objects (stages.ts); the export modal renders them through
   `stageText`, whose wording is pinned by `test/stages.test.ts`.
@@ -209,444 +226,167 @@ Key invariants:
   `out/<videoId>/<date>/clipN[-note].mp4|gif|avif` (full tier) and
   `out/<videoId>/<date>/sharable/` (sharable copies); undated and
   legacy videos keep the flat layout directly in `out/<videoId>/`.
-  `timestamps.txt` (clips mirror) always sits at the video root.
+  `timestamps.txt` (clips mirror) always sits at the video root,
+  rewritten on every clip save and after every done export job of the
+  video.
 - `thumbs/<videoId>/` - filmstrip JPEG frame cache, regenerated on
-  demand, deleted with the video.
+  demand, deleted with the video (DELETE route) or swept as an orphan
+  on the next page load (GET /api/videos -> removeOrphanedThumbs).
 - `docs/example/cat-lapping.webm` - the README screenshot example
   video (see the reshoot rules at the top); restore from the Wayback
   URL if missing.
 - `.tmp/<jobId>/` - per-job temp files, deleted in a `finally`.
 
-## Export recipes (ported from the clipmaker skill)
+## Export recipes (summary)
 
-- **MP4**: input seek `-ss <start>`, output cut `-t <dur>`, always
-  re-encode. `start` is `clip.start` floored to the frame grid
-  (`frameAt` in times.ts), so the first output frame is the frame a
-  player displays at the in-point, not the first frame after it.
-  Video: nvenc (fullres VBR) when available, else libx264
-  slow. Bitrate: source-matched by default
-  (`targetVideoKbit(sourceKbit, srcFps, outFps)`), manual kbit allowed.
-  Audio: AAC 192k with `asetpts,apad` when the source has audio and the
-  clip keeps audio. After encoding, container+video durations are
-  verified within 1.5 frames; one retry; a second miss becomes a
-  `job.warning` (the file is kept).
-- **GIF / AVIF dual tier** (never gif/avif-from-VOD): one shared
-  full-res intermediate mp4 is cut first at the clip's frame (same
-  floored start as the MP4, crop applied, at `anim.fps`) and feeds every
-  tier. Each clip with gif and/or avif selected ALWAYS produces two
-  versions per format: a **full** tier (full resolution - crop size if
-  cropped, else source size - at `anim.fps`, uncapped, at the export
-  dir root)
-  and a **sharable** tier (its longest edge scaled to `anim.maxEdge` -
-  `sharableCap` picks the axis, so a portrait crop scales the height -
-  capped at `anim.maxMB`, in `sharable/`; sharable gif files carry the
-  `-<edge>` edge suffix of the winning rung - e.g. `-750` when the
-  ladder's first sub-cap rung is 750px, not the requested maxEdge).
-  - **GIF**: shared `palettegen` from the full-res cut (256 colors,
-    `stats_mode=full`); full tier = one stage-3 encode at full
-    size@anim.fps, no cap; sharable tier = the ping-pong quality ladder:
-    each edge step (maxEdge x 1.0, .75, .625, .5, .375, .25, even-floored,
-    capped at the full tier's longest edge via sharableCap and scaled on
-    that axis so it never upscales) is tried at
-    anim.fps and then at 5/6 x anim.fps (the recipe's 30 -> 25), highest
-    quality first, taking the first rung whose file is <= maxMB; an
-    emergency 0.1875-edge rung at the stepped fps is tried last; if it
-    still exceeds the cap the job fails.
-  - **AVIF**: full tier = one crf30 encode at full size, no cap;
-    sharable tier = the same 12-rung edge x fps
-    ping-pong grid as the GIF, repeated per CRF step (25, 29, 33, 36 -
-    CRF only changes after the whole grid is exhausted, 48 rungs),
-    first file <= maxMB wins; an emergency maxEdge@anim.fps@crf40 rung
-    is tried last; if it still exceeds the cap the job fails. Duration
-    verify uses the winning rung's fps.
-- **Combined MP4 (highlights)** (MP4 ONLY - a same-name group is ONE
-  job producing ONE mp4 file, never gif/avif; this job is IN ADDITION
-  to the parts' individual exports, which the export route always
-  enqueues): per part (stage
-  `combo-cut: part i/n`) a segment `tmp/seg-i.mp4` is cut at the part's
-  floored frame with `buildComboCutArgs`: crop (if any) then
-  scale/pad to the group's target size (`comboTarget` = the LARGEST
-  clip's crop-or-source size, by area - ties: list order - so the
-  biggest part keeps its own frame and every part lands in the same
-  size; same-aspect parts are scaled to fill it, different-aspect
-  parts are centered with letterbox/pillarbox padding), `fps=N`,
-  `fade=in`/`fade=out` over `comboFade(dur) = min(0.5s, dur/2)`,
-  `setpts=PTS-STARTPTS`, libx264 ultrafast crf14 (the segments need to
-  concat frame-accurate). Audio is per part: source audio with matching
-  `afade` in/out (48kHz AAC), a silent `anullsrc` track when the part
-  mutes audio, or none at all when the whole group has no audio. Then
-  `buildConcatArgs` demuxer-concats the segments (a `concat.txt` list
-  of `file '...'` lines) into the final mp4 with the normal mp4 video
-  encoder (nvenc when available, else x264 slow) at the group's fps and
-  quality (first clip's), `+faststart`; the final encode is
-  duration-verified against `comboDuration` (sum of per-part durations)
-  with one retry (stage `mp4-encode`). Output file:
-  `highlights/<note>-highlights.mp4` - the combined file sits in its own
-  `highlights/` folder in the export dir (bare name from
-  `highlightsFileName` in names.ts), never a `clipN-` name, so it can
-  never collide with a part's own mp4 (part #N owns `clipN-note.mp4`
-  and exports alongside it).
-  **Sharable tier** (an ADDITION to the full file): ONE short file per
-  group that represents every part - each part contributes its MIDDLE
-  section (stage `mp4-share-cut`, "mp4 sharable section i/n"):
-  `comboShareSections` picks ~180s of content total (8-15s per part by
-  part count, a shorter part gives its whole length), cut from the
-  part's pre-cut segment at a fixed 30fps with its own 0.5s fade in/out
-  and the part's audio (source aac, a silent aac track, or none -
-  uniform, so the concat demuxer sees one stream). The sections are
-  then concat-demuxed straight through the rung ladder (stage
-  `mp4-share-rung`): re-encoded rung by rung (top-down) at the fixed
-  30fps, longest edge scaled to one rung of `comboShareRungs`
-  (the full tier's own longest edge first, then 1080/768/512/256 -
-  never upscaled, even-floored, deduped; a portrait group scales the
-  height), a quality-
-  based encode (x264 crf20 / nvenc **constqp** cq20 - this nvenc build
-  has no `crf` rc value), 96k aac when the group has audio, and the
-  first file under the 48MB cap (`COMBO_SHARE_MAX_MB`) wins:
-  `sharable/<note>-highlights.mp4`. Unlike the gif/avif ladders this
-  runs AFTER the full tier is on disk, so a cap miss is a `job.warning`
-  (no sharable copy) instead of a failed job. No part splitting: the
-  full tier stays one file, the sharable tier stays one file.
+Full narrative in **docs/export-recipes.md**; exact arguments pinned by
+`test/args.test.ts` and commented in `args.ts`.
+
+- **MP4**: frame-floored cut, always re-encoded; nvenc (fullres VBR)
+  when available else libx264 slow; source-matched or manual kbit;
+  AAC 192k + `asetpts,apad` with audio. Duration verified within
+  1.5 frames, one retry, second miss = warning (file kept).
+- **GIF / AVIF**: one shared full-res intermediate mp4 (clip frame,
+  crop, `anim.fps`) feeds every tier. ALWAYS two versions per format:
+  a **full** tier (full resolution, uncapped, export dir root) and a
+  **sharable** tier (longest edge at `anim.maxEdge` via `sharableCap`,
+  capped at `anim.maxMB`, in `sharable/`; the gif carries the winning
+  rung's `-<edge>` name suffix). GIF: shared palette + ping-pong edge
+  x fps ladder (`buildLadder`, deduped), emergency rung last, cap miss
+  = failed job. AVIF: crf30 full tier; 3-axis ladder (CRF 25/29/33/36
+  outer, same fps/edge grid inner, 48 rungs), emergency
+  maxEdge@anim.fps@crf40 last, cap miss = failed job.
+- **Combined MP4 (highlights)**: MP4 only, ONE mp4 file per same-name
+  group, IN ADDITION to the parts' individual exports. Per-part
+  frame-accurate segments (target = largest clip's size, 0.5s fades,
+  uniform audio: source / silent / none) concat-demuxed into the final
+  mp4 with the normal encoder, `highlights/<note>-highlights.mp4`
+  (never a `clipN-` name). Sharable tier (an addition): each part's
+  MIDDLE section (~180s total, 8-15s per part) re-cut at fixed 30fps
+  with its own fades, concat-demuxed straight through the
+  longest-edge rung ladder (full tier's edge first, then
+  1080/768/512/256) at x264 crf20 / nvenc constqp cq20, 96k aac, first
+  file under 48MB wins: `sharable/<note>-highlights.mp4`. Runs AFTER
+  the full tier, so a cap miss is a warning, not a failure.
 - **Encoder choice** is probed once per kind and cached in-process:
-  `nvencAvailable()` (a 320x180 testsrc probe-encode) and
-  `avifEncoder()` (a 320x180 testsrc probe-encode into a `.avif`:
-  `libsvtav1` preferred, `libaom-av1` fallback; null when neither works
-  - AVIF jobs then fail with a clear error, MP4/GIF unaffected).
+  `nvencAvailable()` and `avifEncoder()` (libsvtav1 preferred,
+  libaom-av1 fallback; null = AVIF jobs fail cleanly, MP4/GIF
+  unaffected).
 
 ## API
 
-- `POST /api/videos` - JSON `{path}` registers a local file (probed,
-  referenced in place); a raw body (no multipart) with an `x-filename`
-  header uploads it into `uploads/`. 64GB cap, backpressure handled.
-- `GET /api/videos` - runs the ingest-folder sweep (`sweepIngest`,
-  single-flight) and then returns
-  `{ videos, ingested, rejected, pending, notice }`; `notice` is the
-  one-line banner text (contract pinned by `test/ingest.test.ts`), null
-  when the sweep found nothing. `DELETE /api/videos/[id]` - remove
-  (deletes the upload dir only when `uploaded`, plus the video's
-  export dir `out/<videoId>/` and filmstrip cache `thumbs/<videoId>/`);
-  first cancels the video's queued/running exports (queued settle at
-  once, running are killed and their late settle is a no-op on the
-  gone video), then drops ALL of the video's jobs.
-- `GET /api/videos/[id]/file` - byte-range streaming (206); the `<video>`
-  element needs this for seeking.
-- `GET/PUT /api/videos/[id]/clips` - the video's project file: fetch
-  the persisted clip list, or replace it (every clip validated through
-  `toClip` in `lib/clips.ts`, max 500 clips). 404 for unknown videos.
-  GET re-runs stored rows through `toClip`, so legacy shapes (the old
-  `gif` key) self-migrate to `anim` on read. PUT also mirrors the list
-  to `out/<videoId>/timestamps.txt` (one `<start> - <end> <note>` line
-  per clip via `timestampsForVideo`) - best-effort: an empty list
-  deletes the file, and a failed write never fails the save.
-- `GET/PUT /api/defaults` - the new-clip defaults: GET returns the
-  `ClipDefaults` object directly; PUT sanitizes the body through
-  `toDefaults`, persists it to `.data/defaults.json`, and returns
-  `{ok: true}`.
-- `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
-  <=480px; `time` is floored to the frame grid, the same frame the
-  export will cut at.
-- `POST /api/export` - `{videoId, clips, combine?, nos?}` - validates
-  each clip server-side (end clamped to duration+0.5, min 0.2s). EVERY
-  clip always gets its own job (`clipNo` = the clip's 1-based position in
-  the video's clip list). `nos` is an optional parallel array of those
-  positions (sent by the client from the in-memory queue); each entry
-  falls back to the subset index when missing or invalid.
-  `combine` (optional) is an ARRAY of note keys (canonical form:
-  trimmed + lowercased, `combineKey` in lib/combine.ts): for each
-  key, the same-note group (empty note = never grouped) with 2+
-  parts gets ONE ADDITIONAL job carrying `clips` - a combined MP4
-  highlights export (see the recipe below); `clipNo` = the group's
-  first clip's queue position. Requested singletons are skipped - their
-  solo job above already covers them.
-- `GET /api/jobs` (newest batch first, clip order within a batch),
-  `DELETE /api/jobs` (clear finished),
-  `DELETE /api/jobs/[id]` - cancel one queued/running job: sets the
-  cancel flag, kills the job's ffmpeg process tree, settles the job as
-  `error: "cancelled by user"` and removes its `.tmp/<id>/` (returns
-  `{cancelled: false}` when the job is already settled); 404 for an
-  unknown id.
-  `GET /api/jobs/[id]/file?k=mp4|gif|avif` (attachment download;
-  content-type per extension - `video/mp4`, `image/gif`, `image/avif`;
-  the filename header is the basename, so sharable outputs with a
-  relative `name` download cleanly). The file is resolved under
-  `out/<videoId>/` plus the dated subfolder when the id carries one.
+Full reference in **docs/api.md**. Sharp rules only:
 
-## Frontend conventions
+- `GET /api/videos` is the ONLY ingest trigger (page load) and also
+  sweeps orphaned filmstrip caches - the sweep is single-flight.
+- `DELETE /api/videos/[id]` cancels the video's active exports FIRST,
+  then drops the row, the jobs, and the runtime dirs (`out/<id>/`,
+  `thumbs/<id>/`, the upload dir when `uploaded`).
+- `PUT /api/videos/[id]/clips` validates every clip through `toClip`
+  (max 500) and mirrors the list to `timestamps.txt` best-effort; GET
+  re-sanitizes stored rows, so legacy shapes self-migrate on read.
+- `POST /api/export`: every ticked clip gets its OWN job; `combine`
+  note keys ADD one combined job per 2+ part group; `nos` (1-based
+  queue positions from the client) fall back to the subset index; one
+  `createdAt` stamp per request.
+- `DELETE /api/jobs/[id]` is the only cancel path (kills the ffmpeg
+  process tree); `GET /api/jobs/[id]/file?k=..&t=..` resolves through
+  `outputPath`, so a dated id serves from the date subfolder.
+
+## Frontend conventions (sharp rules)
+
+The full per-component tour lives in **docs/ui-conventions.md** - read
+it before touching the page state or a component. The rules that must
+not be lost, short:
 
 - `page.tsx` owns all state; components are presentational. Two
-  machines are explicit reducers in lib/ (pure, unit-tested): the
-  **export view** (`exportView.ts`, consumed through `useExportView`)
-  and the **clip session** (`clipSession.ts`, consumed through a
-  `useReducer` in page.tsx: previewed clip, back position, timeline
-  focus, live range, guided flow step). The **draft model**: a single
-  working `ClipSpec` that mirrors the selected committed clip
-  (`updateDraft` writes to both); selecting a clip loads it into the
-  draft, so every draft change edits the clip in place. The
-  **in/out range is optional** (`session.hasRange`): a fresh video
-  starts with none, so playback is free. A range becomes live via
-  a timeline drag, I/O, the In/Out inputs, adding a clip, or selecting
-  one. Playback loops the range only while one is live.
-- **Add-clip flow** (guided; `step` in the clip session:
-  `"idle" | "set-times" | "crop"`): "Add clip" is always enabled and
-  glows (`.attn`) while no clip is selected. It creates the clip
-  immediately - at the live range if there is one, otherwise a 5s
-  window at the playhead - and selects it. `set-times` glows the
-  Timeline with a hint chip; `crop` glows the Stage. `updateDraft`
-  advances the flow: a patch touching start/end goes set-times ->
-  crop, a crop patch goes crop -> idle. Esc/inert click/back,
-  selecting another clip, video switch, import, and delete reset to
-  idle. `.attn` is plain (unlayered) CSS in globals.css so it overrides
-  the layered component border colors.
-- Styling: Tailwind v4 with design tokens in `globals.css`
-  (`@theme` colors + `.btn`, `.input`, `.panel`, `.chip` classes). New
-  UI must reuse those tokens/classes, not redeclare colors.
-- **Player size**: there is no width cap. The Stage is a flex column:
-  a video *area* (16:9, width-driven below `xl`; at `xl` and up it
-  fills the stage row, see the resizable work area) that holds the
-  video box absolutely inset `3.333%` of the area on every side, then
-  the scrub bar +
-  transport row in a bottom band with the same horizontal margin.
-  The video element is `object-contain` in the box; the crop overlay
-  tracks any box size via the ResizeObserver.
+  explicit machines (pure, unit-tested lib/ reducers): the **export
+  view** (`exportView.ts` via `useExportView`) and the **clip
+  session** (`clipSession.ts` via `useReducer`: previewed clip, back
+  position, timeline focus, live range, guided flow step). The **draft
+  model**: one working `ClipSpec` mirroring the selected committed
+  clip - `updateDraft` writes to both. The in/out range is OPTIONAL
+  (`session.hasRange`): a fresh video has none, so playback is free.
+- **Add-clip flow**: "Add clip" (glowing `.attn` while nothing is
+  selected) creates the clip immediately (live range, else 5s window at
+  the playhead) and selects it; `set-times` glows the Timeline, `crop`
+  glows the Stage; touching the times finishes set-times, setting a
+  crop finishes crop; Esc/inert-click/back, another selection, video
+  switch, import, delete reset to idle. `.attn` is plain (unlayered)
+  CSS in globals.css so it overrides the layered component borders.
+- Styling: Tailwind v4 design tokens in `globals.css` (`@theme` colors
+  + `.btn`/`.input`/`.panel`/`.chip`). New UI reuses tokens/classes,
+  never redeclares colors.
 - **Keyboard**: the Stage keydown listener ignores INPUT/TEXTAREA/
-  SELECT so typing in the In/Out/note inputs stays native; a focused
-  BUTTON passes only ArrowLeft/ArrowRight through to the seek handler
-  (space/I/O/Esc keep native button behavior).
-- **Range-drag pauses playback**: while an in/out handle, a range
-  move, or a new-range draw is in progress, the Timeline reports it
-  via its `onDragChange` prop; the page pauses playback (only if it
-  was playing) and restores the playing state on release, so the frame
-  under the pointer is the exact frame the clip will start on.
-- **Clip list scroll cap**: the queue list is capped at 420px (~12
-  rows) and scrolls internally below `xl` (`max-h-[420px]
-  xl:max-h-none`); at `xl` the grid row already bounds it; rows are
-  compact (`py-1`).
-- The stage measures its frame with a ResizeObserver. The crop overlay
-  covers the whole stage and is always active: every pointer event on
-  the video crops (click = plant a small crop when none exists - a
-  click outside an existing crop keeps it - drag = draw, move, 8
-  resize handles); clicking the video never toggles playback.
-  Letterbox clicks clamp to the frame in `normalizeCrop`.
-- **Ingest banner**: the page's mount fetch of `/api/videos` carries the
-  sweep's `notice` (one line, built by `ingestNotice` in lib/ingest.ts).
-  The page shows it under the video loader - `text-ok` when nothing
-  failed, `text-danger` when any file was rejected - and makes a freshly
-  ingested video the active one (the last one when several arrived).
-- The Stage has a secondary scrub bar under the video (above the
-  transport row): click/drag seeks across the full duration and shows
-  the live in/out band. Stage's `inPoint`/`outPoint` props are
-  nullable - the page passes `null` while no range is live.
-- **Timeline interactions**: click = seek, drag on the empty track =
-  draw a new in/out range (live while dragging), drag the range = move
-  it, drag its edge handles = resize, right-click on the range = clear
-  it (back to free playback). The selection region only renders while
-  a range is live. The track shows a zoomable time window
-  (`view` state in Timeline.tsx): wheel = zoom at the mouse position
-  (min span 10s, max span = whole video, default = whole video),
-  shift+wheel or shift+drag = scroll, double-click = fit. When zoomed,
-  a range chip and a `fit` button overlay the top-right corner. While
-  a range is being drawn/moved near a track edge, the view auto-pans
-  (rAF loop in Timeline.tsx): the dragged content's time references
-  shift with the view and the live onDraw/onMoveSel callbacks re-fire,
-  so the content follows the pointer and the draft stays in sync.
-- Clip batch import is client-side: `clipsTxt.ts` parses `m:ss - m:ss
-  note` lines (h:mm:ss too) and `# header` sections; with several
-  sections only the one whose header contains the active video's file
-  name is imported (`sectionForVideo`), otherwise the UI errors instead
-  of importing the wrong VOD's clips. Imported clips are clamped to the
-  video duration in `page.tsx:importClips`.
-- **timestamps.txt auto-save**: there is no export button for it - the
-  clips PUT route (the debounced clip save) writes
-  `out/<videoId>/timestamps.txt` on every save: one
-  `<start> - <end> <note?>` line per clip, via `timestampsForVideo`
-  (clipsTxt.ts; times through `formatClipTime`, notes flattened to one
-  line). Empty list deletes the file; a failed write never fails the
-  save. `clipsTxtForVideo` is the same serializer with a
-  `# <video name>` header, pinned by the parse/serialize round-trip
-  test - it has no UI caller.
-- **Clip preview jump**: clicking a clip in the queue seeks the player to
-  the clip's start and stores the pre-jump position (`session.returnTo`
-  in the clip session, kept across consecutive clip clicks). The timeline also
-  frames the clip with 5s of margin on each side (`focus` prop,
-  `focusWindow` in times.ts) so the in/out points can be fine-tuned on
-  the track; the focus is cleared on leave/switch and the view itself
-  only resets via double-click/fit or a video switch. Returning is by
-  clicking inert background (a document-level click listener ignores
-  `closest("[data-clips-panel], [data-clip-options], [data-player],
-  [data-layout], button, input, a, select, textarea")`), pressing
-  `Esc` (only while the export modal is closed - the modal captures
-  Esc first), or the back button in the Stage transport row. Leaving the preview also deselects the clip and clears its
-  range (back to free playback). Playing, setting in/out, scrubbing,
-  and switching/removing the video clear the pending return.
-- Times in the clip list and the timeline in/out chip are shown with
-  milliseconds (`formatTime`); the zoom-window label and the preview
-  back button use `formatShort`.
-- Jobs are polled every 1s; the video list is loaded once. Clips are
-  per-video project files: loaded for the active video, saved with a
-  500ms debounce. `clipsLoadedFor` (page.tsx state) is the single
-  load gate: it keeps the clip list from showing the previous video's
-  clips on a switch and keeps the save effect from writing a record
-  that has not been loaded yet (the initial empty one).
-- Layout: below `xl` the page scrolls (root `min-h-screen`). At `xl`
-  and up the app is **viewport-fitted** (root `xl:h-screen`): the work
-  area is a **resizable grid** (see the next bullet) that fills the
-  viewport, and the stage row stretches to the leftover height, so the
-  whole app scales to the actual screen instead of assuming one monitor
-  size. By default nothing overflows (no page scroll); the root does
-  NOT clip (`overflow-hidden` would cut off pinned panels), so if the
-  user pins a panel past the available space the page scrolls instead
-  of losing regions -
-  left column stacks Stage, Timeline, Filmstrip; right column stacks
-  OptionsPanel over ClipQueue, and ClipQueue fills the right column's
-  leftover with its list scrolling inside (the list itself is capped at
-  420px below `xl` - see the clip list scroll cap bullet above).
-  Export progress
-  is not in the layout flow at all: a front-and-center modal
-  (ExportModal) with a bottom-right pill (ExportPill) as its minimized
-  form; both hide themselves when no job exists.
-- **Resizable work area (seams)**: at `xl` and up, draggable grips
-  (the `Resizer` component, `role="separator"`, `data-layout` on the
-  root) sit between the five regions: stage|timeline, timeline|
-  filmstrip, left|right column, options|clipqueue. A drag sets one
-  region's fixed pixel size - the page records the region's size at
-  drag start (`offsetHeight`, measured; the column width comes from
-  `layout.right`) and applies the total pointer delta clamped by
-  `LAYOUT_LIMITS` (right 280-800, stage 140-1200, strip 72-320,
-  options 96-900). Direction follows the seam: a region above/left of
-  its seam (stage, options) grows with the drag, a region below/right
-  of it (filmstrip, right column) shrinks with it. Double-click resets
-  that region to its default sizing (the stage stretches to the
-  leftover height again; the others return to their default sizes).
-  The sizes live in `layout` state (a `WorkLayout`:
-  `right` number, `stage`/`strip`/`options` number-or-null, null =
-  default sizing) and feed the grid templates through CSS variables:
-  outer `xl:grid-cols-[minmax(0,1fr)_auto_var(--lm-col,400px)]`, left
-  `xl:grid-rows-[var(--lm-stage,minmax(0,1fr))_auto_auto_auto_var(--lm-strip,108px)]`,
-  right `xl:grid-rows-[var(--lm-opts,minmax(0,auto))_auto_minmax(0,1fr)]`
-  - an unset stage stretches to the leftover viewport height (dynamic
-  scaling), an unset options takes its natural height (its form scrolls
-  internally on short screens); pinning the stage to a px height leaves
-  the leftover space below the filmstrip. Both column divs carry
-  `min-h-0`: they are grid items of the outer grid, and without it
-  their automatic minimum (min-content height) would force the outer
-  implicit row past the viewport - in intrinsic sizing the queue's
-  `1fr` row measures as auto, so a long clip queue would push the whole
-  work area off-screen; with `min-h-0` the queue row shrinks instead
-  and the clip list scrolls inside. The layout
-  persists to localStorage (`clipmaker.layout.v1`) on drag end and
-  reset via `saveLayout`/`loadLayout` (lib/layout.ts, self-healing on
-  corrupt storage). Seams are hidden below `xl`. The seam `Resizer`
-  must NOT `preventDefault` on `pointerdown` - cancelling it suppresses
-  the compat mouse events the double-click reset relies on; selection
-  is already covered by the body `user-select: none` set during a
-  drag. The inert-background click handler ignores `[data-layout]`
-  (seam clicks never leave a clip preview). The Stage's video area
-  fills its stage row at `xl` (the video letterboxes inside); the
-  Filmstrip row defaults to 108px and its thumbnails scale with the row
-  height; the OptionsPanel scrolls its form when the row is shorter
-  than its natural content.
-- **Shared dialog chrome**: the three modals (export, videos, export
-  plan) render through `Dialog.tsx`, which owns the backdrop click, the
-  capture-phase Esc handler (only the topmost open dialog acts on it -
-  the open-order stack in `lib/dialogStack.ts`), and focus-in/
-  focus-restore. Each modal passes its overlay alignment, panel size
-  classes, aria label, and its close-button focus ref; the capture
-  keeps Esc/backdrop from leaking to the clip preview underneath.
-- **Export plan modal**: the ClipQueue "Export N clips" button does NOT
-  start the export - it opens `ExportPlanModal` (`aria-label="Export
-  clips"`): a compact centered card dialog (max-w-4xl, not full-screen)
-  with a bordered header, a scrollable two-pane body, and a bordered
-  footer. Left pane "clips": cards (rounded-lg, custom accent-filled
-  checkbox drawn with CSS - the input stays sr-only; an unticked card
-  is dimmed at opacity-50); the time + chips share one wrappable
-  group (min-w-0, `wrap`) so long timestamps with all three formats
-  never overflow the card. Right pane "combined highlights": ALWAYS
-  visible - one REAL checkbox card per multi-clip same-name group
-  (note, part count + duration via `comboDuration` + `videoFps`, mp4
-  chip, "parts export individually too · 0.5s fade per part" hint).
-  Combined files are ADDITIONS to the parts, never replacements: a
-  ticked group exports ONE mp4 highlights file of its SELECTED
-  (left-pane-ticked) parts. Card states: unticked = dimmed
-  (opacity-50, shows the group's full part count); ticked with 2+
-  selected parts = active (accent border, shows the selected part
-  count + their duration, `parts of N parts` when partial); ticked
-  with 0-1 selected parts = dimmed (opacity-70, "select 2+ to
-  combine"). The header row has "select all" (clips) plus a
-  "combine all groups" checkbox, rendered only when at least one
-  group exists. The footer shows `N clips - M exports`, where M =
-  selected clip count + ticked groups with 2+ selected parts.
-  "Start export" (disabled at 0 selected) calls
-  `startExport(selected, combineKeys)` in page.tsx, which POSTs
-  `/api/export` with the ticked clips + `combine` = the note keys of
-  the ticked groups, then closes the plan and opens the export view.
-  Like the export modal it captures Esc/backdrop so they do not leak
-  to the clip preview underneath.
-- **Export modal**: the view is the `exportView` reducer (modal |
-  pill; with no jobs nothing renders). It opens on export and
-  auto-opens on an inactive->active jobs transition (covers page
-  reload mid-export). While the modal is open it is the topmost
-  layer: the header button (reads `minimize` while any job is active,
-  `close` once settled), `Esc`, and a backdrop click all dismiss it
-  (to the pill - "N exporting" / "N failed" / "N done" plus "show" -
-  whose `show` reopens it).
-  The modal captures both so they do not leak to the clip preview
-  underneath (capture-phase keydown with `stopPropagation`; the
-  backdrop click also stops the page's inert-background click):
-  while the modal is open, Esc does not leave the preview. The panel
-  is a real dialog (`role=dialog`, `aria-modal`): focus moves to the
-  close button on open and returns to its previous holder on close.
-  The batch tri-state dot (spinner / ok / failed) in the header and in
-  the pill is the shared `JobStateDot` (ExportModal.tsx). Header
-  shows the overall percentage (mean over jobs); each row shows a
-  status chip, the stage text, a per-job bar, and the finished outputs
-  as download buttons (file name + size; the sharable tier is
-  recognizable by its `-<edge>` name suffix); a `cancel` button
-  (queued/running rows only)
-  calls `DELETE /api/jobs/[id]` and the row then settles as
-  `error: "cancelled by user"`. Footer: `clear finished` (shown only when
-  settled with at least one done; clears done/error jobs and dismisses
-  the view when nothing but success remains).
-- **OptionsPanel sections**: clip options are grouped into titled
-  sections (Note, In/Out, Formats, MP4 video, GIF / AVIF, Crop) with
-  progressive disclosure - the MP4 section (frame rate, audio,
-  quality) renders only when the clip's formats include mp4, and the
-  the GIF / AVIF section (frame rate, sharable size cap, sharable max
-  edge) only when gif/avif is selected.
-- **Settings modal (new-clip defaults)**: the top bar's `Settings`
-  button (`ml-auto`) opens `SettingsModal` - the Dialog-chrome modal
-  for the persisted `ClipDefaults` (`.data/defaults.json`): an intro
-  paragraph, a live one-line summary of the current settings
-  (`defaultsSummary` in lib/types.ts, pure, unit-tested), and the
-  sections Formats (pills, at least one kept by `toggleFormatIn`,
-  with a hint per selected format), MP4 video (frame rate, audio,
-  source/manual quality + kbit input), and GIF / AVIF (frame rate,
-  size cap, max edge, the slow-encode note). Every change PUTs
-  `/api/defaults` immediately via the page's `saveDefaults` (no
-  debounce); the page fetches the object on mount. `Reset to defaults`
-  (btn-danger) asks a native `confirm()` first, then
-  `onChange(defaultClipDefaults())`. New drafts (`freshDraft` in
-  page.tsx) and imported clips are created via
-  `defaultClip(note, defaults)`; existing clips keep their own
-  settings, and "Add clip" with a clip selected still copies that
-  clip's draft (the draft model is unchanged).
-- **AVIF duration warning**: AV1 encodes are slow, so a clip whose
-  formats include avif warns by length - yellow (`text-warn`) above 45s,
-  red (`text-danger`) above 60s. The OptionsPanel shows it in the
-  GIF/AVIF section; ClipQueue rows show a matching `slow` chip. The
-  level comes from `avifDurationLevel` (lib/avif.ts, pure, unit-tested).
+  SELECT (typing stays native); a focused BUTTON passes only
+  ArrowLeft/ArrowRight through (space/I/O/Esc keep native behavior);
+  callbacks reach the listener via a `cbRef` so the subscription never
+  re-subscribes.
+- **Range-drag pauses playback** (Timeline `onDragChange` -> page
+  suspends/restores), so the frame under the pointer is the exact
+  frame the clip will start on.
+- **Inert-background click** leaves the clip preview; the listener
+  ignores `closest("[data-clips-panel], [data-clip-options],
+  [data-player], [data-layout], button, input, a, select, textarea")` -
+  new click-ignorable regions must be added to that list.
+- **Timeline**: click = seek, track drag = draw range, range drag =
+  move, edge handles = resize, right-click range = clear. Zoomable
+  window (min span 10s, default = whole video), shift+wheel/drag =
+  pan, double-click = fit, auto-pan while dragging near a track edge.
+- **Clip preview jump**: selecting a clip seeks to its start, stores
+  the pre-jump position (`session.returnTo`), and frames the clip in
+  the timeline (5s margin, `focusWindow`); returning restores the
+  position, deselects, and clears the range.
+- **Clips are per-video project files**: loaded for the active video
+  (gated by `clipsLoadedFor`), saved with a 500ms debounce; a pending
+  save for video A must LAND before a reload of A (the load effect
+  awaits `flushPendingSave()` for the same id), or the reload adopts
+  the pre-edit list and re-saves it over the edit. Jobs are polled
+  every 1s.
+- **timestamps.txt** has no button: the clips PUT route writes it on
+  every save, the runner re-writes it after every done job (deleting
+  the export folder and re-exporting brings it back).
+- Layout: below `xl` the page scrolls; at `xl`+ the app is
+  viewport-fitted with a **resizable work area** (`Resizer` seams,
+  `LAYOUT_LIMITS`, persisted to localStorage via `lib/layout.ts`).
+  Sharp rules: the seam `Resizer` must NOT `preventDefault` on
+  `pointerdown` (the double-click reset needs the compat mouse events);
+  both column divs carry `min-h-0` (without it the queue's min-content
+  height pushes the work area off-screen); the root must NOT clip
+  (`overflow-hidden` would cut off pinned panels).
+- **Shared dialog chrome** (`Dialog.tsx`): backdrop click, stacked Esc
+  (topmost dialog wins, `dialogStack.ts`), focus-in/restore. All four
+  modals (export, videos, export plan, settings) render through it.
+- **Export plan modal** opens on "Export N clips" (NOT a direct
+  export): clip cards with checkboxes + one checkbox per multi-clip
+  same-name group; a ticked group ADDS one mp4 highlights file of its
+  2+ SELECTED parts on top of the parts' own exports; footer shows
+  `N clips - M exports`.
+- **Export modal / pill**: the `exportView` machine (modal | pill;
+  nothing renders with no jobs); rising-edge auto-open; while open it
+  is the topmost layer (Esc/backdrop captured so they don't leak to
+  the clip preview); per-job cancel settles `error: "cancelled by
+  user"`; "clear finished" only when settled with at least one done.
+- **OptionsPanel** sections use progressive disclosure (MP4 section
+  only when mp4 is selected; GIF/AVIF section only when gif/avif is
+  selected). **Settings modal** edits the persisted new-clip defaults
+  (every change PUTs immediately). **AVIF duration warning**: yellow
+  >45s, red >60s (`avifDurationLevel`), shown in the panel and as a
+  `slow` chip in the queue.
 
 ## Gotchas
 - **`jobs.ts` is imported by client components** (page, ExportModal,
   ExportPill) and must never gain a runtime `node:` import - `next build`
   fails with `UnhandledSchemeError` (dev mode does not catch it).
-  Server-only job helpers live in `jobFiles.ts`.
+  Server-only job helpers live in `jobFiles.ts` (which also may not be
+  imported by client code).
 - **typescript is pinned to ^5.9** - TS 7 breaks Next 15's config
   transpile. Do not bump it.
 - **Ingest "still writing" has two triggers**: a size change during the
   probe, or the rename failing with EBUSY/EPERM/EACCES (`classifyMoveFailure`)
   because the writer still owns the file. The size check alone misses
-  write stalls (e.g. between the writer's flushes), so the errno class is
-  the backstop - both report the file as pending, not rejected.
+  write stalls (e.g. between the writer's flushes), so the errno class
+  is the backstop - both report the file as pending, not rejected.
 - **`CLIPMAKER_INGEST_DIR` may point at another volume** (a mount): the
   sweep falls back to copy+unlink when rename hits EXDEV.
 - **The ingest sweep runs inside `GET /api/videos`** - a page load is the
@@ -671,6 +411,12 @@ Key invariants:
   settles asynchronously after `removeVideo`, and must not resurrect
   the row. Temp files in `.tmp/` of a dead job are orphaned and can be
   removed; legacy jobs.json rows with a string `stage` migrate to null.
+- **Self-heal never deletes `out/<videoId>/`.** A dropped session's
+  export files are FINISHED EXPORTS (user data, potentially GBs): only
+  the user's own DELETE (the UI confirm) removes them. The filmstrip
+  cache IS pure cache, so `GET /api/videos` sweeps orphaned
+  `thumbs/<videoId>/` dirs via `removeOrphanedThumbs` after the
+  self-heal. Do not "help" by deleting out/ on self-heal.
 - The MP4 stage encodes directly into `out/<videoId>/` (not a temp
   file), so a job that is cancelled or errors mid-MP4-encode leaves a
   partial `.mp4` behind in `out/` (it is not in the job's `outputs`).
@@ -697,10 +443,10 @@ Key invariants:
 
 ## Verification
 
-- `bun test` - 287 unit tests over the pure libs (times, bitrate,
+- `bun test` - 295 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
-  dialogStack, ingest, range, ffmpeg's once).
+  dialogStack, ingest, range, jobFiles, ffmpeg's once).
 - `bunx tsc --noEmit` - typecheck.
 - End-to-end: load a video by path, mark in/out, draw a crop, export;
   check the job output with ffprobe (duration within 1.5 frames of the
@@ -714,6 +460,8 @@ Key invariants:
   middle-sections file - ~180s of content from 8-15s middles
   per part, longest edge at the first fitting rung starting at the full
   resolution, under 48MB, one file no matter how long the full tier is).
+  `out/<videoId>/timestamps.txt` exists after a save AND comes back
+  after deleting the export folder and re-exporting.
   Run against
   `bun run prod` - see the dev-mode store gotcha.
 - Ingest: drop a file into `ingest/` and refresh - it is moved into
@@ -721,4 +469,6 @@ Key invariants:
   still being written reports pending and ingests on the next refresh;
   an unproberable file is left in place and retried on the next refresh,
   and only after three consecutive failed sweeps lands in
-  `ingest/failed/` with a `.err` sidecar.
+  `ingest/failed/` with a `.err` sidecar. Deleting a source file outside
+  the app and refreshing drops the session AND its `thumbs/<videoId>/`
+  cache dir (the `out/` dir stays - user data).
