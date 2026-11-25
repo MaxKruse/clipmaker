@@ -80,6 +80,28 @@ export function removeThumbsForVideo(videoId: string): void {
   // keep a stale status alive for the next video that reuses the id).
   states.delete(videoId);
 }
+
+/**
+ * Delete filmstrip caches of videos that no longer exist: the store
+ * self-heals a session whose source file was deleted OUTSIDE the app,
+ * and that path never runs the DELETE route, so the cache dirs would
+ * otherwise linger forever. `keep` = the live video ids; the in-memory
+ * state of removed dirs goes too. A missing thumbs dir is a no-op.
+ */
+export function removeOrphanedThumbs(keep: Iterable<string>, dir: string = THUMBS_DIR): void {
+  let names: string[];
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return;
+  }
+  const live = new Set(keep);
+  for (const n of names) {
+    if (live.has(n)) continue;
+    fs.rmSync(path.join(dir, n), { recursive: true, force: true });
+    states.delete(n);
+  }
+}
 /** One fast-seek frame at time t, scaled to a small jpeg. Never rejects. */
 function extractThumb(video: VideoInfo, t: number): Promise<void> {
   const args = [

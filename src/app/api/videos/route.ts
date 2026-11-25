@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { probeVideo } from "@/lib/ffmpeg";
+import { removeOrphanedThumbs } from "@/lib/filmstrip";
 import { ingestNotice, sweepIngest } from "@/lib/ingest";
 import { UPLOADS_DIR, store } from "@/lib/store";
 import { type VideoInfo } from "@/lib/types";
@@ -98,6 +99,9 @@ export async function POST(req: NextRequest) {
  */
 export async function GET() {
   const report = await sweepIngest();
+  // The store may have just self-healed sessions whose source file was
+  // deleted outside the app: their filmstrip caches go with the rows.
+  removeOrphanedThumbs(store.videos.keys());
   return NextResponse.json({
     videos: [...store.videos.values()],
     ...report,

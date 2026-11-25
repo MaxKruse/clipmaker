@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { filmstripPlan } from "../src/lib/filmstrip";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { filmstripPlan, removeOrphanedThumbs } from "../src/lib/filmstrip";
 
 describe("filmstripPlan", () => {
   test("caps the thumbnail count for long videos", () => {
@@ -35,6 +38,30 @@ describe("filmstripPlan", () => {
     const { times } = filmstripPlan(200, 50);
     for (let i = 1; i < times.length; i++) {
       expect(times[i]).toBeGreaterThan(times[i - 1]);
+    }
+  });
+});
+
+describe("removeOrphanedThumbs", () => {
+  test("deletes dirs without a live video, keeps the live ones", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clipmaker-thumbs-"));
+    try {
+      for (const id of ["a", "b", "c"]) fs.mkdirSync(path.join(dir, id), { recursive: true });
+      removeOrphanedThumbs(["b"], dir);
+      expect(fs.existsSync(path.join(dir, "a"))).toBe(false);
+      expect(fs.existsSync(path.join(dir, "b"))).toBe(true);
+      expect(fs.existsSync(path.join(dir, "c"))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("no thumbs dir at all is a no-op", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clipmaker-thumbs-"));
+    try {
+      expect(() => removeOrphanedThumbs(["a"], dir)).not.toThrow();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
