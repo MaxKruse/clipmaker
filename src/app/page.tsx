@@ -84,16 +84,18 @@ export default function Page() {
   // save effect re-runs (a video switch), so the payload lives here and
   // gets flushed on switch and on unload instead of being dropped.
   const pendingSave = useRef<{ id: string; body: string } | null>(null);
-  const flushPendingSave = () => {
+  const flushPendingSave = (): Promise<void> => {
     const p = pendingSave.current;
-    if (!p) return;
+    if (!p) return Promise.resolve();
     pendingSave.current = null;
-    fetch(`/api/videos/${p.id}/clips`, {
+    return fetch(`/api/videos/${p.id}/clips`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: p.body,
       keepalive: true,
-    }).catch(() => {});
+    })
+      .catch(() => {})
+      .then(() => undefined);
   };
 
   // Seam dragging: a panel starts at its natural height, which is only
@@ -190,7 +192,8 @@ export default function Page() {
     if (!activeId) return;
     const id = activeId;
     let alive = true;
-    fetch(`/api/videos/${id}/clips`)
+    const load = () =>
+      fetch(`/api/videos/${id}/clips`)
       .then((r) => r.json())
       .then((j: { clips: ClipSpec[] }) => {
         if (!alive) return;
@@ -213,6 +216,10 @@ export default function Page() {
         }
       })
       .catch(() => {});
+    // A pending save for THIS video must land before the reload: otherwise
+    // the reload adopts the pre-edit list and the debounce re-saves it over
+    // the edit (A -> B -> A within the debounce window).
+    void (pendingSave.current?.id === id ? flushPendingSave().then(load) : load());
     return () => {
       alive = false;
     };
