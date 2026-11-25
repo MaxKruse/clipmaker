@@ -106,6 +106,18 @@ describe("buildLadder", () => {
       }
     }
   });
+
+  test("small bases collapse duplicate edges: no rung is encoded twice", () => {
+    for (const base of [10, 20, 40]) {
+      const ladder = buildLadder(base, 30);
+      const keys = new Set(ladder.map((r) => `${r.edge}@${r.fps}`));
+      expect(keys.size).toBe(ladder.length);
+      // quality order preserved: edges never increase while descending
+      for (let i = 1; i < ladder.length; i++) {
+        expect(ladder[i].edge).toBeLessThanOrEqual(ladder[i - 1].edge);
+      }
+    }
+  });
 });
 
 describe("emergencyRung", () => {

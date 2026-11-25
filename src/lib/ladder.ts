@@ -37,9 +37,18 @@ export function sharableCap(maxEdge: number, w: number, h: number): { cap: numbe
 export function buildLadder(maxEdge: number, fps: number): Rung[] {
   const low = Math.max(1, Math.round(fps * FPS_STEP));
   const rungs: Rung[] = [];
+  // evenFloor collapses adjacent edge steps at small maxEdge (e.g. 10 ->
+  // 6, 6): a collapsed pair would be encoded twice and the second encode
+  // can never fit the cap, so dedupe on (edge, fps).
+  const seen = new Set<string>();
   for (const r of EDGE_RATIOS) {
     const edge = evenFloor(maxEdge * r);
-    rungs.push({ edge, fps }, { edge, fps: low });
+    for (const f of [fps, low]) {
+      const key = `${edge}@${f}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rungs.push({ edge, fps: f });
+    }
   }
   return rungs;
 }
