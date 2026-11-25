@@ -17,13 +17,17 @@ export async function POST(req: NextRequest) {
     const crop = body.crop ? normalizeCrop(v.width, v.height, body.crop) : null;
     const out = path.join(TMP_DIR, `preview-${v.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpg`); // unique per request
     fs.mkdirSync(TMP_DIR, { recursive: true });
-    // Same floor-to-frame as the export so the preview shows the frame the cut will use.
-    await run(findBin("ffmpeg"), buildPreviewArgs({ in: v.path, out, time: frameAt(time, v.fps), maxW: 480, crop }), 30_000);
-    const buf = await fs.promises.readFile(out);
-    await fs.promises.unlink(out); // the response is built from the buffer
-    return new Response(new Uint8Array(buf), {
-      headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
-    });
+    try {
+      // Same floor-to-frame as the export so the preview shows the frame the cut will use.
+      await run(findBin("ffmpeg"), buildPreviewArgs({ in: v.path, out, time: frameAt(time, v.fps), maxW: 480, crop }), 30_000);
+      const buf = await fs.promises.readFile(out);
+      return new Response(new Uint8Array(buf), {
+        headers: { "content-type": "image/jpeg", "cache-control": "no-store" },
+      });
+    } finally {
+      // A failed probe/read must not leak the jpeg into .tmp until restart.
+      await fs.promises.unlink(out).catch(() => {});
+    }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
   }
