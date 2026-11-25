@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
-import { outputsGone, safeOutputName } from "../src/lib/jobFiles";
+import { outputsGone, outputPath, saveTimestampsMirror, safeOutputName } from "../src/lib/jobFiles";
 import { defaultClip, type Job, type JobOutput } from "../src/lib/types";
 
 const job = (id: string, clipNo: number, createdAt: number): Job => ({
@@ -92,5 +94,62 @@ describe("outputsGone", () => {
   test("undated ids check the flat layout", () => {
     const j: Job = { ...job("j1", 1, 1), status: "done", outputs: [out("mp4", "clip1.mp4")] };
     expect(seenPaths(j, [])).toEqual([path.join(OUT, "v1", "clip1.mp4")]);
+  });
+});
+
+describe("outputPath", () => {
+  test("undated ids resolve flat under out/<videoId>/", () => {
+    expect(outputPath("out", "v1", "clip1.mp4")).toBe(path.join("out", "v1", "clip1.mp4"));
+  });
+
+  test("dated ids resolve into the date subfolder", () => {
+    expect(outputPath("out", "2026-11-19_ab12cd34", "clip1.mp4")).toBe(
+      path.join("out", "2026-11-19_ab12cd34", "2026-11-19", "clip1.mp4"),
+    );
+  });
+
+  test("sharable and highlights names keep their subfolder", () => {
+    expect(outputPath("out", "v1", "sharable/clip1-512.gif")).toBe(
+      path.join("out", "v1", "sharable", "clip1-512.gif"),
+    );
+    expect(outputPath("out", "2026-11-19_ab12cd34", "highlights/Dance-highlights.mp4")).toBe(
+      path.join("out", "2026-11-19_ab12cd34", "2026-11-19", "highlights", "Dance-highlights.mp4"),
+    );
+  });
+});
+
+describe("saveTimestampsMirror", () => {
+  test("writes one line per clip at the video root (never the date subfolder)", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clipmaker-mirror-"));
+    try {
+      saveTimestampsMirror("2026-11-19_ab12cd34", [{ start: 10, end: 20.5, note: "a" }], dir);
+      expect(
+        fs.readFileSync(path.join(dir, "2026-11-19_ab12cd34", "timestamps.txt"), "utf8"),
+      ).toBe("0:10 - 0:20.5 a\n");
+      expect(fs.existsSync(path.join(dir, "2026-11-19_ab12cd34", "2026-11-19"))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("an empty clip list deletes the mirror file", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clipmaker-mirror-"));
+    try {
+      saveTimestampsMirror("v1", [{ start: 10, end: 20, note: "" }], dir);
+      saveTimestampsMirror("v1", [], dir);
+      expect(fs.existsSync(path.join(dir, "v1", "timestamps.txt"))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("ids that could escape the out dir are ignored", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "clipmaker-mirror-"));
+    try {
+      saveTimestampsMirror("../evil", [{ start: 10, end: 20, note: "x" }], dir);
+      expect(fs.existsSync(path.join(dir, "..", "evil", "timestamps.txt"))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

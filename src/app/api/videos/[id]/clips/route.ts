@@ -1,10 +1,7 @@
-import fs from "fs";
-import path from "path";
 import { NextRequest, NextResponse } from "next/server";
-import { timestampsForVideo } from "@/lib/clipsTxt";
+import { saveTimestampsMirror } from "@/lib/jobFiles";
 import { toClip } from "@/lib/clips";
 import { OUT_DIR, store } from "@/lib/store";
-import type { ClipSpec } from "@/lib/types";
 
 /**
  * A video's project file: its persisted clip list. Clips are re-run
@@ -42,28 +39,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     });
     store.setClips(id, clips);
-    saveTimestamps(id, clips);
+    try {
+      saveTimestampsMirror(id, clips, OUT_DIR);
+    } catch {
+      // the clip save already succeeded; the mirror is best-effort.
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 400 });
-  }
-}
-
-/**
- * Mirror the saved clip list to out/<videoId>/timestamps.txt (the
- * auto-saved "download timestamps" - no button anymore): every clip save
- * rewrites the file, an empty list deletes it. Best-effort by contract:
- * a write problem must never fail the clip save itself.
- */
-function saveTimestamps(id: string, clips: ClipSpec[]) {
-  if (!id || id.includes("/") || id.includes("\\") || id.includes("..")) return;
-  try {
-    const dir = path.join(OUT_DIR, id);
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, "timestamps.txt");
-    if (clips.length === 0) fs.rmSync(file, { force: true });
-    else fs.writeFileSync(file, timestampsForVideo(clips));
-  } catch {
-    // the clip save already succeeded; the mirror is best-effort.
   }
 }

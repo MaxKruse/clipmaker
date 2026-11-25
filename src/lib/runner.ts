@@ -46,7 +46,7 @@ import {
   type Rung,
 } from "./ladder";
 import { clipFileName, highlightsFileName } from "./names";
-import { dateFromVideoId } from "./vodDate";
+import { exportDir, saveTimestampsMirror } from "./jobFiles";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
@@ -146,6 +146,14 @@ async function startJob(job: Job) {
     job.stage = { id: "starting" };
     store.updateJob(job);
     await runJob(job);
+    // A finished export re-establishes the video's timestamps.txt mirror:
+    // the user may have deleted the export folder (or just the file), and
+    // re-exporting is the cue that the mirror belongs there again.
+    try {
+      saveTimestampsMirror(job.videoId, store.getClips(job.videoId), OUT_DIR);
+    } catch {
+      // best-effort: the job's own outputs are what matter
+    }
     job.status = "done";
     job.pct = 1;
   } catch (e) {
@@ -187,7 +195,7 @@ async function runJob(job: Job) {
   fs.mkdirSync(tmp, { recursive: true });
   // Dated ids (a broadcast date in the source name) put every export
   // file in a subfolder of just that date under the video folder.
-  const outDir = path.join(OUT_DIR, job.videoId, dateFromVideoId(job.videoId) ?? "");
+  const outDir = exportDir(OUT_DIR, job.videoId);
   fs.mkdirSync(outDir, { recursive: true });
   if (job.clips && job.clips.length > 1) {
     await runCombined(video, job, tmp, outDir);
