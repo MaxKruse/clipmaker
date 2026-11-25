@@ -46,10 +46,10 @@ import {
   type Rung,
 } from "./ladder";
 import { clipFileName, highlightsFileName } from "./names";
+import { dateFromVideoId } from "./vodDate";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
 import type { Job, VideoInfo } from "./types";
-import { dateFromVideoId } from "./vodDate";
 
 // Bounded pool: up to CONCURRENCY exports run at once. NVENC handles
 // several concurrent GPU encodes, and on a CPU-only box parallel jobs
@@ -68,6 +68,14 @@ const handles = new Map<string, FfmpegHandle>();
  * ceiling that only trips on a genuinely hung ffmpeg, freeing the pool.
  */
 const encodeTimeout = (sec: number) => Math.max(60_000, Math.ceil(sec * 120_000));
+
+/**
+ * How far an encoded duration may miss the request before it counts as a
+ * miss (in frames of the OUTPUT fps): up to this many frames is codec/
+ * container rounding, not a wrong cut. The one tolerance shared by the
+ * full-tier check (which retries) and the sharable check (which warns).
+ */
+const DURATION_TOLERANCE_FRAMES = 1.5;
 
 /**
  * Run a tracked encode: registers the job's kill handle (so cancelJob can
@@ -444,7 +452,7 @@ async function checkSharableDuration(
   kind: "mp4" | "gif" | "avif",
 ): Promise<void> {
   const { container } = await streamDurations(file);
-  if (Math.abs(container - dur) > 1.5 / fps) {
+  if (Math.abs(container - dur) > DURATION_TOLERANCE_FRAMES / fps) {
     job.warning = `${kind} sharable duration ${container.toFixed(2)}s vs requested ${dur.toFixed(2)}s`;
   }
 }
@@ -456,16 +464,16 @@ async function checkDurationOrRetry(
   job: Job,
   rerun: () => Promise<void>,
 ): Promise<string | undefined> {
-  const frame = 1 / fps;
+  const frame = DURATION_TOLERANCE_FRAMES / fps;
   let d = await streamDurations(file);
   let worst = Math.max(Math.abs(d.container - dur), Math.abs(d.video - dur));
-  if (worst > 1.5 * frame) {
+  if (worst > frame) {
     job.stage = { id: "mp4-retry" };
     await rerun();
     d = await streamDurations(file);
     worst = Math.max(Math.abs(d.container - dur), Math.abs(d.video - dur));
   }
-  return worst > 1.5 * frame
+  return worst > frame
     ? `duration check: container ${d.container.toFixed(2)}s / video ${d.video.toFixed(2)}s vs requested ${dur.toFixed(2)}s`
     : undefined;
 }
