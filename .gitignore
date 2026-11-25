@@ -7,6 +7,5 @@ ingest/
 thumbs/
 docs/example/
 *.log
-next-env.d.ts
 .data/
 tsconfig.tsbuildinfo
