@@ -43,7 +43,11 @@ src/lib/names.ts    safe output file names (clip1-note.mp4, highlightsFileName f
                     downloads
 src/lib/vodDate.ts  broadcast date in a VOD file name -> dated video id
                     (<date>_<random> via newVideoId) + dateFromVideoId (id -> date)
-src/lib/crop.ts     CropBox model, normalizeCrop (even, clamped, >=16px)
+src/lib/crop.ts     CropBox model (x,y,w,h + rotation angle), clampAngle,
+                    cropCenter, cropBBox (tilted crop's axis-aligned bbox),
+                    normalizeCrop (even, clamped, >=16px; tilted crop's bbox
+                    re-centered/shrunk to fit the frame), cropFilter (the
+                    straighten recipe: bbox crop + rotate + center crop)
 src/lib/clipsTxt.ts parse Clips .txt notes (time ranges + # sections) + the
                     inverse timestampsForVideo serializer (round trip pinned
                     by test/clipsTxt.test.ts)
@@ -123,10 +127,20 @@ Key invariants:
   newer batch renders above older ones.
 - **The runner is the only place that spawns ffmpeg.** Routes and
   components never build ffmpeg commands themselves.
-- **Crops are stored in source pixels** (`CropBox {x,y,w,h}`, all even,
-  min 16px, clamped to the frame). The UI converts between screen px and
-  source px via the measured frame rect; the preview route re-normalizes
+- **Crops are stored in source pixels** (`CropBox {x,y,w,h,angle}`, x/y/w/h
+  even, min 16px, clamped to the frame). `x,y` are the axis-aligned base
+  box; `angle` (degrees, 0 = axis-aligned, positive = clockwise, clamped
+  to +/-45) is the crop's rotation about its center. The UI converts between
+  screen px and source px via the measured frame rect and a `toLocal`
+  (pointer rotated into the crop's own frame); the preview route re-normalizes
   server-side, so a stale UI crop can never produce an invalid filter.
+- **A tilted crop is straightened on export, not exported tilted.** The
+  output is the crop's content at 0 degrees, sized `w x h`, with no black
+  corners: ffmpeg crops the crop's axis-aligned bounding box, `rotate`s it
+  about the crop center (the bbox center) by `-angle`, then crops the centered
+  `w x h`. At `angle=0` this is byte-identical to the plain `crop=w:h:x:y`,
+  so existing clips are untouched. `normalizeCrop` re-centers/shrinks a tilted
+  crop so its bounding box stays inside the frame.
 - **Progress events use `-progress pipe:1`**; both `run` and
   `runProgress` in ffmpeg.ts parse it. `runProgress` takes the expected
   total duration and reports 0..100. It reads ONLY `out_time_us`:
@@ -164,7 +178,9 @@ Key invariants:
   of the id via `dateFromVideoId`; videos registered before that stay
   on their legacy random id and flat layout.
 - `ClipSpec { id, note, start, end, crop, formats, audio, fps, quality,
-  anim }` - one clip. `formats` is a non-empty subset of
+  anim }` - one clip. `crop` is `CropBox | null` = `{x,y,w,h,angle}` (see
+  the crop invariant: `angle` is the tilt about the crop center, straightened
+  on export). `formats` is a non-empty subset of
   `"mp4" | "gif" | "avif"`. `fps` (default 60; 25/30/60) is the MP4
   frame rate; `quality { mode: "source" | "manual", kbit }` applies to
   MP4; `anim { fps, maxMB, maxEdge }` (fps default 30; 15/20/25/30/60)
@@ -240,7 +256,11 @@ Key invariants:
 ## Export recipes (summary)
 
 Full narrative in **docs/export-recipes.md**; exact arguments pinned by
-`test/args.test.ts` and commented in `args.ts`.
+`test/args.test.ts` and commented in `args.ts`. The crop filter
+(`cropFilter` in lib/crop.ts) is the first `-vf` stage of every encode that
+carries a crop: axis-aligned it is `crop=w:h:x:y`; tilted it straightens the
+crop (bbox crop + `rotate=-angle` about the crop center + centered `w x h`
+crop), so a tilted crop exports as a level `w x h` with no black corners.
 
 - **MP4**: frame-floored cut, always re-encoded; nvenc (fullres VBR)
   when available else libx264 slow; source-matched or manual kbit;
@@ -314,6 +334,16 @@ not be lost, short:
   crop finishes crop; Esc/inert-click/back, another selection, video
   switch, import, delete reset to idle. `.attn` is plain (unlayered)
   CSS in globals.css so it overrides the layered component borders.
+- **Crop rotation**: `CropOverlay` draws the crop as a div rotated about its
+  center (`transform: rotate(angle)`, `transformOrigin: center`); all
+  hit-testing converts the pointer with `toLocal` (rotated into the crop's
+  own frame, where it reads axis-aligned). A `rot` handle sits just outside
+  the NE corner - grabbing it turns the crop about its center (the new angle
+  is the handle's pointer angle minus its rest angle, relative to the
+  center). draw/move/rot read the source frame; the resize handles read the
+  local frame. A fresh draw is axis-aligned; a move/resize keeps the tilt.
+  The crop section of `OptionsPanel` shows the angle in the chip and a
+  "straighten" button (sets `angle` to 0) when tilted.
 - Styling: Tailwind v4 design tokens in `globals.css` (`@theme` colors
   + `.btn`/`.input`/`.panel`/`.chip`). New UI reuses tokens/classes,
   never redeclares colors.

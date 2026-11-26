@@ -57,7 +57,14 @@ not be lost are restated (short) in AGENTS.md.
   the video crops (click = plant a small crop when none exists - a
   click outside an existing crop keeps it - drag = draw, move, 8 resize
   handles); clicking the video never toggles playback. Letterbox clicks
-  clamp to the frame in `normalizeCrop`.
+  clamp to the frame in `normalizeCrop`. The crop is drawn as a div rotated
+  about its center (`transform: rotate(angle)`); a `rot` handle just outside
+  the NE corner turns the crop about its center (new angle = handle's pointer
+  angle minus its rest angle). Pointers are converted with `toLocal` (rotated
+  into the crop's own frame, where it reads axis-aligned) before the existing
+  hit-test/resize math; draw/move/rot read the source frame, resize reads the
+  local frame. `OptionsPanel`'s crop section shows the angle and a
+  "straighten" button when tilted.
 - **Ingest banner**: the page's mount fetch of `/api/videos` carries the
   sweep's `notice` (one line, built by `ingestNotice` in lib/ingest.ts).
   The page shows it under the video loader - `text-ok` when nothing

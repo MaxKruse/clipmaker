@@ -33,7 +33,8 @@ caller, the export-dir path rule) live in AGENTS.md.
   `toDefaults`, persists it to `.data/defaults.json`, and returns
   `{ok: true}`.
 - `POST /api/preview` - `{videoId, time, crop}` -> one cropped JPEG at
-  <=480px; `time` is floored to the frame grid, the same frame the
+  <=480px; `crop` is `{x,y,w,h,angle}` (a tilted crop is straightened, like
+  the export); `time` is floored to the frame grid, the same frame the
   export will cut at.
 - `POST /api/export` - `{videoId, clips, combine?, nos?}` - validates
   each clip server-side (start clamped to duration, end clamped to

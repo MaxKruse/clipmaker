@@ -2,7 +2,8 @@
 
 A local web app for cutting clips out of your own videos. Load a video from
 your disk (or upload a file), scrub it, mark in/out points, optionally crop
-the frame, mute the audio, pick a quality and frame rate, and export each
+and rotate the frame (to level a tilted shot), mute the audio, pick a
+quality and frame rate, and export each
 clip as an MP4 and/or a GIF and/or an animated AVIF. Every GIF/AVIF export
 comes in two versions: a full-quality, full-resolution original, and a
 size-capped "sharable" copy that fits the cap you set.
@@ -79,7 +80,10 @@ port).
    plain click plants a small crop at that point; with a crop already
    there, a click outside it keeps it). You can move it,
    resize it from any of the 8 handles, and lock the aspect ratio
-   (16:9, 1:1, source). A live preview shows the exact frame that will
+   (16:9, 1:1, source). To straighten a tilted shot, grab the round
+   handle just outside a corner and drag - the crop turns about its
+   center and is exported level (no black corners). A live preview shows the
+   exact frame that will
    be exported. Clicking the video never starts playback - use the
    Play button or `space`.
    A thin scrub bar sits directly under the video: click or drag it

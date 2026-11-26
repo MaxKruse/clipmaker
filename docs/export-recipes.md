@@ -5,6 +5,21 @@ The full pipeline recipes. The EXACT ffmpeg arguments are pinned by
 the narrative, the code is the source of truth. Changing a recipe means
 updating the args builder AND its test in the same change.
 
+## Crop / rotation (the first `-vf` stage)
+
+`cropFilter` (lib/crop.ts) is the first video filter of every encode that
+carries a crop. A crop is `{x,y,w,h,angle}`: the axis-aligned base box plus a
+rotation `angle` (degrees) about its center.
+
+- Axis-aligned (`angle=0`): plain `crop=w:h:x:y`.
+- Tilted (`angle!=0`): the crop is straightened, not exported tilted. Three
+  stages: crop the crop's axis-aligned bounding box, `rotate` it about the
+  crop center (the bbox center) by `-angle` (`c=black`, `ow`/`oh` set to the
+  bbox so the content is preserved, not clipped), then crop the centered
+  `w x h`. The output is the crop's content at 0 degrees, sized `w x h`, with
+  no black corners. `normalizeCrop` re-centers/shrinks a tilted crop so its
+  bounding box stays inside the frame before this runs.
+
 ## MP4
 
 Input seek `-ss <start>`, output cut `-t <dur>`, always re-encode.
