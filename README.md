@@ -29,14 +29,16 @@ mark the in and out points.
 
 ![](docs/screenshot-3-crop.png)
 
-Optional crop: drag a rectangle over the frame - the crop updates live
-while you drag.
+Optional crop: drag a rectangle over the frame, then grab the corner
+handle to rotate it - straighten a tilted shot; the angle shows in the
+crop chip.
 
 ![](docs/screenshot-4-main.png)
 
-The finished clip: the crop box sits over the frame, the timeline holds
-the in/out range, and the clip (with its MP4/AVIF and crop chips) is
-ready in the queue.
+The finished clip: the crop is straightened (tilt it with the corner
+handle, then straighten it back), sits over the frame, the timeline
+holds the in/out range, and the clip (with its MP4/AVIF and crop chips)
+is ready in the queue.
 
 ## How to run
 
