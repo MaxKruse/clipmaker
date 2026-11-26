@@ -111,13 +111,17 @@ export interface ClipSpec {
 export interface JobOutput {
   kind: Format;
   /**
-   * Path relative to out/<videoId>/; the sharable tier sits in sharable/,
-   * the combined highlights file in highlights/.
+   * Path relative to out/<videoId>/; a clip's sharable tier sits in
+   * sharable/, compilation files in Compilations/, their previews in
+   * Compilations/Preview/.
    */
   name: string;
   size: number;
-  /** "full" = full-quality/full-res original, "sharable" = size-capped copy. */
-  tier?: "full" | "sharable";
+  /**
+   * "full" = full-quality/full-res original, "sharable" = a clip's
+   * size-capped copy, "preview" = a compilation's middle-sections file.
+   */
+  tier?: "full" | "sharable" | "preview";
 }
 
 export type JobStatus = "queued" | "running" | "done" | "error";
@@ -132,9 +136,11 @@ export interface Job {
   /**
    * Present when this job concatenates a group of same-name clips
    * (the "combine" export): the parts in file order. The job produces
-   * ONE mp4 "highlights" file (mp4 only - no gif/avif). `clip`/`clipNo`
-   * are the group's first member (naming + display); the runner uses
-   * `clips` for the whole job. Absent on ordinary single-clip jobs.
+   * ONE mp4 compilation file in Compilations/ (mp4 only - no gif/avif)
+   * plus a short preview in Compilations/Preview/ when the cap fits.
+   * `clip`/`clipNo` are the group's first member (naming + display); the
+   * runner uses `clips` for the whole job. Absent on ordinary single-clip
+   * jobs.
    */
   clips?: ClipSpec[];
   status: JobStatus;

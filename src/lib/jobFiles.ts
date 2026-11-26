@@ -16,7 +16,7 @@ export function exportDir(outBase: string, videoId: string): string {
   return path.join(outBase, videoId, dateFromVideoId(videoId) ?? "");
 }
 
-/** An output file under the video's export dir (name may be sharable/ or highlights/...). */
+/** An output file under the video's export dir (name may be bare, sharable/..., or Compilations/...). */
 export function outputPath(outBase: string, videoId: string, name: string): string {
   return path.join(exportDir(outBase, videoId), name);
 }
@@ -42,18 +42,18 @@ export function saveTimestampsMirror(
 }
 
 /**
- * Only a bare output name, or one under sharable/ or highlights/, may
- * reach the out dir: jobs.json rows carrying any other name are dropped
- * when the store loads, so a corrupt or hostile row can never steer the
- * download route outside its video's export dir.
+ * Only a bare output name, or one under sharable/, Compilations/, or
+ * Compilations/Preview/, may reach the out dir: jobs.json rows carrying
+ * any other name are dropped when the store loads, so a corrupt or
+ * hostile row can never steer the download route outside its video's
+ * export dir.
  */
 export function safeOutputName(name: string): boolean {
   if (!name || name.includes("..") || name.startsWith("/")) return false;
   const parts = name.split("/");
-  return (
-    parts.length <= 2 &&
-    (parts.length === 1 || parts[0] === "sharable" || parts[0] === "highlights")
-  );
+  if (parts.length === 1) return true;
+  if (parts.length === 2) return parts[0] === "sharable" || parts[0] === "Compilations";
+  return parts.length === 3 && parts[0] === "Compilations" && parts[1] === "Preview";
 }
 
 /**

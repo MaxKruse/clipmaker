@@ -114,29 +114,29 @@ port).
    and export them all at once.
 6. **Export** - clicking "Export" first opens an export plan: your
    clips as a card list with a checkbox each (all ticked by default), a
-   select-all, and a **"combined highlights"** pane with a checkbox on
-   every group of clips that share the same note (part count and total
-   length per group, plus a "combine all groups" box). Every ticked
-   clip is exported individually; each ticked group ADDS one MP4
-   "highlights" file on top of its parts - its selected clips merged
-   with a 0.5s fade in and out per part, named
-   `highlights/<note>-highlights.mp4` (in its own `highlights/` folder;
-   combined files are MP4 only, no GIF/AVIF,
-   and a group needs 2+ selected clips). Every combined file also gets
-   a sharable copy (`sharable/<note>-highlights.mp4`): one short file
-   that shows a bit of every part - each part contributes its middle
-   (about 3 minutes of content total, 8-15s per part) with a fade in
-   and out, re-encoded at a fixed 30fps with the longest edge starting
-   at full resolution and stepping down 1080, 768, 512, or 256 (the
-   first size that fits under 48MB), small enough
-   to send over chat no matter how long the highlights file is. The footer shows how many
+   select-all, and a **"compilations"** pane with a checkbox on every
+   group of clips that share the same note (part count and total length
+   per group, plus a "combine all groups" box). Every ticked clip is
+   exported individually; each ticked group ADDS one combined MP4 on
+   top of its parts - its selected clips merged with a 0.5s fade in and
+   out per part, named `Compilations/<note>-combined.mp4` (in its own
+   `Compilations/` folder; combined files are MP4 only, no GIF/AVIF, and
+   a group needs 2+ selected clips). Every combined file also gets a
+   preview copy (`Compilations/Preview/<note>-Preview.mp4`): one short
+   file that shows a bit of every part - each part contributes its
+   middle (about 3 minutes of content total, 8-15s per part) with a
+   fade in and out, re-encoded at a fixed 30fps with the longest edge
+   starting at full resolution and stepping down 1080, 768, 512, or 256
+   (the first size that fits under 48MB), small enough to send over
+   chat no matter how long the combined file is. The footer shows how many
    clips and how many exports the plan produces. Unticked clips are
    skipped. "Start export" closes the plan and starts the jobs;
    several jobs run in parallel (two at a time by default, raise it
    with the CLIPMAKER_CONCURRENCY env var).
    A front-and-center export view opens: an overall progress bar plus a
    progress bar and stage text per clip (e.g. `gif: sharable 512p25
-   (8/12)`), and download links for every finished file. While it is
+   (8/12)` or `preview: 720p30 (1/2)`), and download links for every
+   finished file. While it is
    working you can minimize it to a small pill in the bottom-right
    corner ("show" reopens it); when everything is done it stays open
    with the outputs until you close it. Any queued or running row has a
@@ -144,8 +144,9 @@ port).
    deletes its temp files) and marks it `cancelled by user`, leaving
    the rest of the batch to finish. Files are also written to
    `out/<video-id>/` on disk, sharable copies in
-   `out/<video-id>/sharable/`, and the combined highlights file in
-   `out/<video-id>/highlights/`. When the video's file name carries a
+   `out/<video-id>/sharable/`, combined files in
+   `out/<video-id>/Compilations/`, and their previews in
+   `out/<video-id>/Compilations/Preview/`. When the video's file name carries a
    broadcast date (e.g. a Twitch download named
    `twitch_user_2026-11-19 07-03-30_...`), the video id starts with it
    (`2026-11-19_ab12cd34`) so the folders sort chronologically, and
@@ -260,15 +261,14 @@ original must stay in place, use "Add by path" instead.
   encodes are slower than GIFs but far smaller at the same quality.
   The sharable AVIF copy shrinks the same way as the sharable GIF -
   size and frame rate first, then quality.
-- The sharable copy of a combined highlights file is not the finished
-  file shrunk - it is a condensed cut: every part contributes its
-  middle section (about 3 minutes of content total, 8-15s per part),
-  re-encoded at a fixed 30fps with the longest edge starting at full
-  resolution and stepping down 1080, 768, 512, or 256 (never upscaled,
-  48MB cap, audio at 96k). When even the
-  smallest size exceeds the cap, the full file is kept and the job
-  shows a warning instead of failing. The full highlights file itself
-  is always one file, no matter how long.
+- The preview copy of a combined file is not the finished file shrunk -
+  it is a condensed cut: every part contributes its middle section
+  (about 3 minutes of content total, 8-15s per part), re-encoded at a
+  fixed 30fps with the longest edge starting at full resolution and
+  stepping down 1080, 768, 512, or 256 (never upscaled, 48MB cap, audio
+  at 96k). When even the smallest size exceeds the cap, the full file
+  is kept and the job shows a warning instead of failing. The combined
+  file itself is always one file, no matter how long.
 - Session data (loaded videos, clip lists, job history, new-clip
   defaults) lives in `.data/`; running jobs are not resumable after a
   server restart.

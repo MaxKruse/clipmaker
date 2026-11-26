@@ -47,7 +47,7 @@ caller, the export-dir path rule) live in AGENTS.md.
   trimmed + lowercased, `combineKey` in lib/combine.ts): for each
   key, the same-note group (empty note = never grouped) with 2+
   parts gets ONE ADDITIONAL job carrying `clips` - a combined MP4
-  highlights export (see the recipe above); `clipNo` = the group's
+  compilation export (see the recipe above); `clipNo` = the group's
   first clip's queue position. Requested singletons are skipped - their
   solo job above already covers them.
 - `GET /api/jobs` (newest batch first, clip order within a batch),
@@ -57,7 +57,7 @@ caller, the export-dir path rule) live in AGENTS.md.
   `error: "cancelled by user"` and removes its `.tmp/<id>/` (returns
   `{cancelled: false}` when the job is already settled); 404 for an
   unknown id.
-  `GET /api/jobs/[id]/file?k=mp4|gif|avif&t=full|sharable` (attachment
+  `GET /api/jobs/[id]/file?k=mp4|gif|avif&t=full|sharable|preview` (attachment
   download; `k` picks the kind, `t` the tier - a link without `t`
   keeps the first match; content-type per extension - `video/mp4`,
   `image/gif`, `image/avif`; the filename header is the basename, so

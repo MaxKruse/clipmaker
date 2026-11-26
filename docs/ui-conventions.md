@@ -203,13 +203,13 @@ not be lost are restated (short) in AGENTS.md.
   checkbox drawn with CSS - the input stays sr-only; an unticked card
   is dimmed at opacity-50); the time + chips share one wrappable group
   (min-w-0, `wrap`) so long timestamps with all three formats never
-  overflow the card. Right pane "combined highlights": ALWAYS visible -
-  one REAL checkbox card per multi-clip same-name group (note, part
-  count + duration via `comboDuration` + `videoFps`, mp4 chip, "parts
-  export individually too · 0.5s fade per part" hint). Combined files
-  are ADDITIONS to the parts, never replacements: a ticked group
-  exports ONE mp4 highlights file of its SELECTED (left-pane-ticked)
-  parts. Card states: unticked = dimmed (opacity-50, shows the
+  overflow the card. Right pane "compilations": ALWAYS visible - one
+  REAL checkbox card per multi-clip same-name group (note, part count +
+  duration via `comboDuration` + `videoFps`, mp4 chip, "parts export
+  individually too · 0.5s fade per part" hint). Combined files are
+  ADDITIONS to the parts, never replacements: a ticked group exports ONE
+  combined mp4 (in Compilations/, plus a preview in
+  Compilations/Preview/) of its SELECTED (left-pane-ticked) parts. Card states: unticked = dimmed (opacity-50, shows the
   group's full part count); ticked with 2+ selected parts = active
   (accent border, shows the selected part count + their duration,
   `parts of N parts` when partial); ticked with 0-1 selected parts =

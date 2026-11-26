@@ -12,7 +12,7 @@ interface Props {
   videoFps: number;
   onClose: () => void;
   /** Start the export: the selected clips (list order = part order) plus
-   * the note keys of the ticked groups that get a combined highlights
+   * the note keys of the ticked groups that get a combined compilation
    * mp4 IN ADDITION to their parts. */
   onStart: (clips: ClipSpec[], combineKeys: string[]) => void;
 }
@@ -50,11 +50,11 @@ function CheckBox({ checked }: { checked: boolean }) {
  * The export plan modal: "Export clips" opens this instead of
  * auto-starting the export. Two panes: the clip cards (one checkbox
  * each, all preselected, unticked cards dimmed) on the left, and the
- * "combined highlights" picker on the right - one checkbox per
- * same-name group (2+ clips). A ticked group adds ONE mp4 highlights
- * file (its SELECTED parts, 0.5s fades each) on top of the individual
- * exports: the parts are never replaced by the combined file. A group
- * only produces a combined file while 2+ of its clips stay selected.
+ * "compilations" picker on the right - one checkbox per same-name group
+ * (2+ clips). A ticked group adds ONE combined mp4 (its SELECTED parts,
+ * 0.5s fades each, in Compilations/) on top of the individual exports:
+ * the parts are never replaced by the combined file. A group only
+ * produces a combined file while 2+ of its clips stay selected.
  */
 export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
   const [selected, setSelected] = useState<Set<string>>(
@@ -67,17 +67,17 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
   const selectedClips = clips.filter((c) => selected.has(c.id));
   const allSelected = selectedClips.length === clips.length;
   // Multi-clip same-name groups: the combined-export candidates.
-  const highlightGroups = groupCombine(clips).filter((g) => g.length > 1);
+  const compilationGroups = groupCombine(clips).filter((g) => g.length > 1);
   const groupKey = (g: ClipSpec[]) => combineKey(g[0].note);
   const selectedParts = (g: ClipSpec[]) => g.filter((c) => selected.has(c.id));
   // Ticked groups that actually produce a combined job (2+ selected parts).
-  const combinedJobCount = highlightGroups.filter(
+  const combinedJobCount = compilationGroups.filter(
     (g) => combined.has(groupKey(g)) && selectedParts(g).length >= 2,
   ).length;
   // Combined files ADD to the individual exports, never replace them.
   const jobCount = selectedClips.length + combinedJobCount;
   const allCombined =
-    highlightGroups.length > 0 && highlightGroups.every((g) => combined.has(groupKey(g)));
+    compilationGroups.length > 0 && compilationGroups.every((g) => combined.has(groupKey(g)));
 
   const toggleAll = () =>
     setSelected(allSelected ? new Set() : new Set(clips.map((c) => c.id)));
@@ -96,7 +96,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
       return next;
     });
   const toggleAllGroups = () =>
-    setCombined(allCombined ? new Set() : new Set(highlightGroups.map(groupKey)));
+    setCombined(allCombined ? new Set() : new Set(compilationGroups.map(groupKey)));
 
   return (
     <Dialog
@@ -127,7 +127,7 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
             <CheckBox checked={allSelected} />
             select all
           </label>
-          {highlightGroups.length > 0 && (
+          {compilationGroups.length > 0 && (
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -191,17 +191,17 @@ export function ExportPlanModal({ clips, videoFps, onClose, onStart }: Props) {
 
           <div className="min-w-0 space-y-2">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="label">combined highlights</span>
+              <span className="label">compilations</span>
               <span className="text-[11px] text-muted">
                 parts export individually too · 0.5s fade per part
               </span>
             </div>
-            {highlightGroups.length === 0 ? (
+            {compilationGroups.length === 0 ? (
               <p className="text-xs text-muted">
                 no two clips share a note - nothing to combine
               </p>
             ) : (
-              highlightGroups.map((g) => {
+              compilationGroups.map((g) => {
                 const key = groupKey(g);
                 const parts = selectedParts(g);
                 const ticked = combined.has(key);

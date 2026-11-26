@@ -7,7 +7,7 @@ import { findOutput } from "@/lib/jobs";
 import { disposition } from "@/lib/names";
 import { OUT_DIR, store } from "@/lib/store";
 
-/** Download a finished job's output: ?k=mp4|gif|avif picks the kind, ?t=full|sharable the tier. */
+/** Download a finished job's output: ?k=mp4|gif|avif picks the kind, ?t=full|sharable|preview the tier. */
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const job = store.jobs.get(id);

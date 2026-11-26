@@ -78,7 +78,7 @@ emergency maxEdge@anim.fps@crf40 rung is tried last; if it still exceeds
 the cap the job fails. Duration verify uses the winning rung's fps
 (sharable check = warn, not retry).
 
-## Combined MP4 (highlights)
+## Combined MP4 (compilations)
 
 MP4 ONLY - a same-name group is ONE job producing ONE mp4 file, never
 gif/avif. This job is IN ADDITION to the parts' individual exports,
@@ -103,13 +103,16 @@ encoder (nvenc when available, else x264 slow) at the group's fps and
 quality (first clip's), `+faststart`; the final encode is
 duration-verified against `comboDuration` (sum of per-part durations)
 with one retry (stage `mp4-encode`). Output file:
-`highlights/<note>-highlights.mp4` - the combined file sits in its own
-`highlights/` folder in the export dir (bare name from
-`highlightsFileName` in names.ts), never a `clipN-` name, so it can never
-collide with a part's own mp4 (part #N owns `clipN-<note>.mp4` and
-exports alongside it).
+`Compilations/<note>-combined.mp4` - the combined file sits in the
+`Compilations/` folder in the export dir (bare name from `combinedFileName`
+in names.ts), never a `clipN-` name, so it can never collide with a part's
+own mp4 (part #N owns `clipN-<note>.mp4` and exports alongside it). The
+name is collision-safe across groups: `combinedBase` appends a `-x<hash>`
+of the raw note whenever sanitizing changed the note, so two different
+notes that sanitize alike ("a/b" and "a b") land on different files, and
+re-exporting a subset of the same group lands on the same name.
 
-### Sharable tier (an ADDITION to the full file)
+### Preview tier (an ADDITION to the full file)
 
 ONE short file per group that represents every part - each part
 contributes its MIDDLE section (stage `mp4-share-cut`):
@@ -125,11 +128,12 @@ through the rung ladder (stage `mp4-share-rung`): re-encoded rung by rung
 group scales the height), a quality-based encode (x264 crf20 / nvenc
 **constqp** cq20 - this nvenc build has no `crf` rc value), 96k aac when
 the group has audio, and the first file under the 48MB cap
-(`COMBO_SHARE_MAX_MB`) wins: `sharable/<note>-highlights.mp4`. Unlike
-the gif/avif ladders this runs AFTER the full tier is on disk, so a cap
-miss is a `job.warning` (no sharable copy) instead of a failed job. No
-part splitting: the full tier stays one file, the sharable tier stays
-one file.
+(`COMBO_SHARE_MAX_MB`) wins: `Compilations/Preview/<note>-Preview.mp4`
+(bare name from `previewFileName` in names.ts, same collision-safe base).
+Unlike the gif/avif ladders this runs AFTER the full tier is on disk, so a
+cap miss is a `job.warning` (no preview written) instead of a failed job.
+No part splitting: the full tier stays one file, the preview stays one
+file.
 
 ## Encoder choice
 

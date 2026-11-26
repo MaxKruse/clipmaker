@@ -4,7 +4,7 @@ import type { Job, JobOutput } from "./types";
  * Tier of an output. Rows written before the tier field existed carry the
  * sharable copy under sharable/, so the path infers it there.
  */
-export function resolveTier(o: JobOutput): "full" | "sharable" {
+export function resolveTier(o: JobOutput): "full" | "sharable" | "preview" {
   return o.tier ?? (o.name.includes("sharable/") ? "sharable" : "full");
 }
 

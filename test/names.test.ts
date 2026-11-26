@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { clipFileName, disposition, highlightsFileName, sanitizeNote } from "../src/lib/names";
+import {
+  clipFileName,
+  combinedBase,
+  combinedFileName,
+  disposition,
+  previewFileName,
+  sanitizeNote,
+} from "../src/lib/names";
 
 describe("clipFileName", () => {
   test("mp4 without note", () => {
@@ -27,19 +34,32 @@ describe("clipFileName", () => {
   });
 });
 
-describe("highlightsFileName", () => {
-  test("named after the group's note, never a clipN- part name", () => {
-    expect(highlightsFileName("Dance")).toBe("Dance-highlights.mp4");
-    expect(highlightsFileName("Dance")).not.toBe(clipFileName(1, "Dance", "mp4"));
+describe("compilation file names", () => {
+  test("a clean note is used as-is: <note>-combined.mp4 / <note>-Preview.mp4", () => {
+    expect(combinedFileName("Dance")).toBe("Dance-combined.mp4");
+    expect(previewFileName("Dance")).toBe("Dance-Preview.mp4");
+    expect(combinedFileName("Dance")).not.toBe(clipFileName(1, "Dance", "mp4"));
   });
 
-  test("sanitizes the note like clip names", () => {
-    expect(highlightsFileName('a/b: c  d')).toBe("a b c d-highlights.mp4");
+  test("different notes that sanitize alike get distinct deterministic bases", () => {
+    const slash = combinedBase("a/b");
+    const space = combinedBase("a b");
+    expect(space).toBe("a b"); // the clean note keeps its plain name
+    expect(slash).not.toBe(space); // ...the sanitized one does not share it
+    expect(slash.startsWith("a b-x")).toBe(true);
+    expect(combinedBase("a/b")).toBe(slash); // stable across runs and batches
+    expect(combinedFileName("a/b")).toBe(`${slash}-combined.mp4`);
+    expect(previewFileName("a/b")).toBe(`${slash}-Preview.mp4`);
+  });
+
+  test("whitespace variants of the same words also stay apart", () => {
+    expect(combinedBase("a  b")).not.toBe(combinedBase("a b"));
+    expect(combinedBase("A B")).toBe("A B"); // case is kept
   });
 
   test("a note with nothing left after sanitizing drops the note part", () => {
-    expect(highlightsFileName("   ")).toBe("highlights.mp4");
-    expect(highlightsFileName("///")).toBe("highlights.mp4");
+    expect(combinedFileName("   ")).toBe("combined.mp4");
+    expect(previewFileName("///")).toBe("Preview.mp4");
   });
 });
 

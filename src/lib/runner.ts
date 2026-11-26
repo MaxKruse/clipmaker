@@ -45,7 +45,7 @@ import {
   type LongAxis,
   type Rung,
 } from "./ladder";
-import { clipFileName, highlightsFileName } from "./names";
+import { clipFileName, combinedFileName, previewFileName } from "./names";
 import { exportDir, saveTimestampsMirror } from "./jobFiles";
 import { OUT_DIR, store, TMP_DIR } from "./store";
 import { frameAt } from "./times";
@@ -230,8 +230,9 @@ async function cutIntermediate(video: VideoInfo, job: Job, inter: string) {
 }
 
 /**
- * Combined export: same-name clips concatenated into ONE mp4 "highlights"
- * file (mp4 only). Each part is cut from the source at the group's target
+ * Combined export: same-name clips concatenated into ONE mp4 compilation
+ * file (mp4 only), with a short middle-sections preview alongside it.
+ * Each part is cut from the source at the group's target
  * size and fps with its intro/outro fades, then the parts are
  * concatenated (concat demuxer, re-encoded with the mp4 recipe) with the
  * usual duration check + one retry.
@@ -276,13 +277,14 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
 
   const encoder = await pickEncoder();
   const kbit = resolveOutKbit(video, fps, first.quality);
-  // highlights/<note>-highlights.mp4, NOT clipN-...: the parts export
+  // Compilations/<note>-combined.mp4, NOT clipN-...: the parts export
   // individually alongside this file (part #N would own clipN-<note>.mp4).
-  // The combined file sits in its own highlights/ folder in the export dir.
-  const outName = highlightsFileName(first.note);
-  const highlightsDir = path.join(outDir, "highlights");
-  fs.mkdirSync(highlightsDir, { recursive: true });
-  const outPath = path.join(highlightsDir, outName);
+  // Combined files sit in the Compilations/ folder in the export dir,
+  // their previews in Compilations/Preview/.
+  const outName = combinedFileName(first.note);
+  const compDir = path.join(outDir, "Compilations");
+  fs.mkdirSync(compDir, { recursive: true });
+  const outPath = path.join(compDir, outName);
   const concat = () =>
     runTracked(
       job,
@@ -300,17 +302,17 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   await concat();
   const warn = await checkDurationOrRetry(outPath, total, fps, job, concat);
   if (warn) job.warning = warn;
-  job.outputs.push({ kind: "mp4", name: `highlights/${outName}`, size: fs.statSync(outPath).size, tier: "full" });
+  job.outputs.push({ kind: "mp4", name: `Compilations/${outName}`, size: fs.statSync(outPath).size, tier: "full" });
 
-  // Sharable tier: ONE file per group - every part contributes its middle
+  // Preview tier: ONE file per group - every part contributes its middle
   // section (comboShareSections: ~3 min of content total, 8-15s per part,
   // a shorter part gives its whole length), each section fading in and
   // out like the full tier. The sections are concat-demuxed straight
   // through the longest-edge ladder (the full tier's own longest edge
   // first, then 1080/768/512/256) at a fixed 30fps, first rung under
-  // the 48MB cap wins. Runs
+  // the 48MB cap wins: Compilations/Preview/<note>-Preview.mp4. Runs
   // AFTER the full tier is on disk, so when even the smallest rung
-  // exceeds the cap the full file stays and the tier is skipped with a
+  // exceeds the cap the full file stays and the preview is skipped with a
   // warning instead of failing the job.
   const durs = parts.map((p) => p.end - frameAt(p.start, video.fps));
   const sections = comboShareSections(durs, fps);
@@ -341,29 +343,30 @@ async function runCombined(video: VideoInfo, job: Job, tmp: string, outDir: stri
   const share = await comboShareRung(
     job, writeConcatList(tmp, "share-list.txt", secFiles), secDur, groupAudio, encoder, tmp, target, rungs,
   );
-  const shareDir = path.join(outDir, "sharable");
+  const shareDir = path.join(compDir, "Preview");
   fs.mkdirSync(shareDir, { recursive: true });
   if (share) {
-    const sharePath = path.join(shareDir, outName);
+    const previewName = previewFileName(first.note);
+    const sharePath = path.join(shareDir, previewName);
     fs.renameSync(share.file, sharePath);
     await checkSharableDuration(sharePath, secDur, COMBO_SHARE_FPS, job, "mp4");
     job.outputs.push({
       kind: "mp4",
-      name: `sharable/${outName}`,
+      name: `Compilations/Preview/${previewName}`,
       size: fs.statSync(sharePath).size,
-      tier: "sharable",
+      tier: "preview",
     });
   } else {
-    const msg = `${shareCapWarning("highlights", rungs)} - no sharable copy written; shorten the clips or raise the cap`;
+    const msg = `${shareCapWarning(rungs)} - no preview written; shorten the clips or raise the cap`;
     job.warning = job.warning ? `${job.warning} · ${msg}` : msg;
   }
   store.updateJob(job);
 }
 
-/** "sharable <subject> exceeds the 48MB cap even at <smallest>px/30fps". */
-function shareCapWarning(subject: string, rungs: number[]): string {
+/** "the compilation preview exceeds the 48MB cap even at <smallest>px/30fps". */
+function shareCapWarning(rungs: number[]): string {
   const smallest = rungs[rungs.length - 1];
-  return `sharable ${subject} exceeds the ${COMBO_SHARE_MAX_MB}MB cap even at ${smallest}px/${COMBO_SHARE_FPS}fps`;
+  return `the compilation preview exceeds the ${COMBO_SHARE_MAX_MB}MB cap even at ${smallest}px/${COMBO_SHARE_FPS}fps`;
 }
 
 /**

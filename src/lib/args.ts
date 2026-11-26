@@ -236,9 +236,9 @@ export function buildComboCutArgs(s: {
 }
 
 /**
- * Sharable combined tier: one part's middle section cut from its
+ * Preview combined tier: one part's middle section cut from its
  * pre-cut segment (already at the group's target size, so no crop or
- * scale here), re-timed to the fixed sharable fps with its own
+ * scale here), re-timed to the fixed preview fps with its own
  * intro/outro fades on both edges (fade length pre-clamped by comboFade).
  * Same fast intermediate encode as the full-tier cuts so the section
  * concat stays frame-accurate; the audio mirrors the part's (source aac,
@@ -284,7 +284,7 @@ export function buildComboShareSectionArgs(s: {
 }
 
 /**
- * Sharable combined tier: the parts' middle sections concat-demuxed into
+ * Preview combined tier: the parts' middle sections concat-demuxed into
  * one stream and re-encoded at a fixed 30fps, the longest edge scaled to
  * one ladder rung (never upscaled by the caller), CRF so a smaller rung
  * is a smaller file, and a lighter 96k aac track (192k alone would blow

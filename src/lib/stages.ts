@@ -33,9 +33,9 @@ export function stageText(s: JobStage): string {
     case "mp4-retry":
       return "mp4 retry";
     case "mp4-share-cut":
-      return `mp4 sharable section ${s.index}/${s.total}`;
+      return `preview: part ${s.index}/${s.total}`;
     case "mp4-share-rung":
-      return `mp4 sharable ${s.edge}p${s.fps} (${s.index}/${s.total})`;
+      return `preview: ${s.edge}p${s.fps} (${s.index}/${s.total})`;
     case "anim-cut":
       return "anim: cut (full-res)";
     case "gif-palette":

@@ -4,9 +4,10 @@ import type { ClipSpec, VideoInfo } from "./types";
 
 /**
  * Combined export: several same-name clips concatenated into ONE mp4
- * "highlights" file (MP4 only - the combined job never produces
- * gif/avif). These helpers describe the group; the runner (lib/runner.ts)
- * executes it.
+ * compilation file in Compilations/ (MP4 only - the combined job never
+ * produces gif/avif), plus a short middle-sections preview in
+ * Compilations/Preview/. These helpers describe the group; the runner
+ * (lib/runner.ts) executes it.
  */
 
 /** The combine key of a note: trimmed + lowercased; "" = not combinable. */
@@ -77,12 +78,12 @@ export function comboTarget(clips: ClipSpec[], video: VideoInfo): { w: number; h
   return best!;
 }
 
-// The sharable combined tier: one short file that represents every part -
+// The preview combined tier: one short file that represents every part -
 // each part contributes its MIDDLE section (~3 min of content total),
 // the sections are stitched with fades, re-encoded at a fixed 30fps, the
 // longest edge at one of the fixed rungs, the first rung that lands under
 // the cap wins.
-/** Fixed frame rate of the sharable combined file (the full tier keeps the group fps). */
+/** Fixed frame rate of the preview file (the full tier keeps the group fps). */
 export const COMBO_SHARE_FPS = 30;
 /** Size cap of the sharable combined file, in MB. */
 export const COMBO_SHARE_MAX_MB = 48;
@@ -92,7 +93,7 @@ export const COMBO_SHARE_CRF = 20;
 export const COMBO_SHARE_EDGES = [1080, 768, 512, 256];
 
 /**
- * Ladder rungs of the sharable combined file: the frame's own longest
+ * Ladder rungs of the preview file: the frame's own longest
  * edge first (the natural quality of the sections - never upscaled),
  * then the fixed edges scaled to the same cap, even-floored, descending
  * and deduped - a 720p tier stays [720, 512, 256], a 1080p tier starts
@@ -110,7 +111,7 @@ export function comboShareRungs(w: number, h: number): number[] {
 }
 
 /**
- * Target content length (seconds) of the sharable highlights file: the
+ * Target content length (seconds) of the preview file: the
  * per-part middle-section length is this divided by the part count,
  * clamped to MIN..MAX, so a group of two parts gets 15s middles and a
  * group of 24+ parts gets 8s.
@@ -122,7 +123,7 @@ export const COMBO_SHARE_SECTION_MIN = 8;
 export const COMBO_SHARE_SECTION_MAX = 15;
 
 /**
- * Middle-section cuts of the sharable highlights file: every part
+ * Middle-section cuts of the preview file: every part
  * contributes the middle of its own cut (a part shorter than its section
  * gives its whole length), the section start frame-aligned on the group's
  * frame grid. One short watchable file no matter how long the full tier

@@ -55,7 +55,7 @@ export default function Page() {
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   // The export plan modal (opened by "Export clips"): the clip list with
-  // checkboxes + per-group combined-highlights checkboxes, instead of
+  // checkboxes + per-group compilation checkboxes, instead of
   // auto-starting the export.
   const [exportPlan, setExportPlan] = useState(false);
   // What the page-load ingest sweep did (null when it found nothing).
@@ -497,7 +497,7 @@ export default function Page() {
 
   // Enqueue the export the plan modal approved: every selected clip gets
   // its own job, and each ticked same-name group (2+ selected parts) gets
-  // one additional job (a single mp4 "highlights" file, parts
+  // one additional job (a single combined mp4 in Compilations/, parts
   // concatenated with 0.5s fades) on top of its parts. Success opens the
   // progress modal.
   const startExport = async (selected: ClipSpec[], combineKeys: string[]) => {

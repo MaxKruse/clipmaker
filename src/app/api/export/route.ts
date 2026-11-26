@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
       videoId?: string;
       clips?: unknown[];
       /** Note keys (trimmed + lowercased) of the groups that get a
-       * combined mp4 highlights job, in addition to their parts. */
+       * combined compilation mp4 job, in addition to their parts. */
       combine?: unknown;
       /** 1-based queue positions of the ticked clips, parallel to
        * `clips` (0/missing = fall back to the subset index). */
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     const batch = Date.now();
     const ids: string[] = [];
 
-    // Every selected clip gets its own job. A combined highlights file
+    // Every selected clip gets its own job. A combined compilation file
     // is an ADDITION to its parts, never a replacement: the parts are
     // the individual exports the user ticked in the plan modal.
     for (let i = 0; i < clips.length; i++) {
@@ -69,8 +69,9 @@ export async function POST(req: NextRequest) {
 
     // "combine" carries the note keys of the groups that get ONE
     // additional combined job (parts concatenated with 0.5s fades into a
-    // single mp4 "highlights" file). A group needs 2+ parts - a
-    // requested singleton is already covered by its solo job above.
+    // single mp4 in Compilations/, plus a preview in Compilations/Preview/).
+    // A group needs 2+ parts - a requested singleton is already covered by
+    // its solo job above.
     const combineKeys = new Set(
       Array.isArray(body.combine)
         ? body.combine.map((k) => combineKey(String(k))).filter((k) => k !== "")
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
         id: newId(),
         videoId: v.id,
         videoName: v.name,
-        // A combined job produces the single mp4 highlights file, so its
+        // A combined job produces the single mp4 compilation file, so its
         // representative clip (display + naming) is mp4-only.
         clip: { ...first, formats: ["mp4"] },
         clipNo: clipNoFor(clips.indexOf(first)),

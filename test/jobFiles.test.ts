@@ -26,11 +26,12 @@ const out = (kind: JobOutput["kind"], name: string, tier?: JobOutput["tier"]): J
 });
 
 describe("safeOutputName", () => {
-  test("accepts bare names and the sharable/ and highlights/ subfolders", () => {
+  test("accepts bare names, sharable/, and the Compilations/ folders", () => {
     expect(safeOutputName("clip1-note.mp4")).toBe(true);
     expect(safeOutputName("Dance-highlights.mp4")).toBe(true);
     expect(safeOutputName("sharable/clip1-1024.gif")).toBe(true);
-    expect(safeOutputName("highlights/Dance-highlights.mp4")).toBe(true);
+    expect(safeOutputName("Compilations/Dance-combined.mp4")).toBe(true);
+    expect(safeOutputName("Compilations/Preview/Dance-Preview.mp4")).toBe(true);
   });
 
   test("rejects escapes, deep paths, unknown subfolders, and empty names", () => {
@@ -38,6 +39,7 @@ describe("safeOutputName", () => {
     expect(safeOutputName("sharable/../clip1.mp4")).toBe(false);
     expect(safeOutputName("/abs.mp4")).toBe(false);
     expect(safeOutputName("sharable/deep/file.mp4")).toBe(false);
+    expect(safeOutputName("Compilations/other/x.mp4")).toBe(false);
     expect(safeOutputName("other/file.mp4")).toBe(false);
     expect(safeOutputName("")).toBe(false);
   });
@@ -108,12 +110,15 @@ describe("outputPath", () => {
     );
   });
 
-  test("sharable and highlights names keep their subfolder", () => {
+  test("sharable and Compilations names keep their subfolder", () => {
     expect(outputPath("out", "v1", "sharable/clip1-512.gif")).toBe(
       path.join("out", "v1", "sharable", "clip1-512.gif"),
     );
-    expect(outputPath("out", "2026-11-19_ab12cd34", "highlights/Dance-highlights.mp4")).toBe(
-      path.join("out", "2026-11-19_ab12cd34", "2026-11-19", "highlights", "Dance-highlights.mp4"),
+    expect(outputPath("out", "2026-11-19_ab12cd34", "Compilations/Dance-combined.mp4")).toBe(
+      path.join("out", "2026-11-19_ab12cd34", "2026-11-19", "Compilations", "Dance-combined.mp4"),
+    );
+    expect(outputPath("out", "2026-11-19_ab12cd34", "Compilations/Preview/Dance-Preview.mp4")).toBe(
+      path.join("out", "2026-11-19_ab12cd34", "2026-11-19", "Compilations", "Preview", "Dance-Preview.mp4"),
     );
   });
 });
