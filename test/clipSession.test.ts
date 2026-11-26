@@ -76,7 +76,7 @@ describe("clipSessionReducer", () => {
 
     r = clipSessionReducer(s({ step: "crop" }), { type: "patched", patch: { note: "x" } });
     expect(r.step).toBe("crop"); // untouched by a note patch
-    r = clipSessionReducer(r, { type: "patched", patch: { crop: { x: 0, y: 0, w: 16, h: 16 } } });
+    r = clipSessionReducer(r, { type: "patched", patch: { crop: { x: 0, y: 0, w: 16, h: 16, angle: 0 } } });
     expect(r.step).toBe("idle");
   });
 

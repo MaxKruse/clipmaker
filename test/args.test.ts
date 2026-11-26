@@ -12,7 +12,7 @@ import {
   buildPreviewArgs,
 } from "../src/lib/args";
 
-const CROP = { x: 0, y: 0, w: 1280, h: 720 };
+const CROP = { x: 0, y: 0, w: 1280, h: 720, angle: 0 };
 
 describe("buildMp4Args (nvenc, audio, crop)", () => {
   test("matches the frame-accurate re-encode recipe", () => {
@@ -48,6 +48,16 @@ describe("buildMp4Args (nvenc, audio, crop)", () => {
     });
     expect(args).toContain("-vf");
     expect(args[args.indexOf("-vf") + 1]).toBe("fps=25,setpts=PTS-STARTPTS");
+  });
+
+  test("tilted crop -> the straighten recipe is prepended before fps", () => {
+    const args = buildMp4Args({
+      in: "in.mp4", out: "out.mp4", start: 0, dur: 10, fps: 30,
+      kbit: 2500, audio: false, crop: { x: 460, y: 180, w: 1000, h: 540, angle: 5 }, encoder: "h264_nvenc",
+    });
+    const vf = args[args.indexOf("-vf") + 1];
+    expect(vf.startsWith("crop=1044:626:438:136,rotate=-0.08726")).toBe(true);
+    expect(vf.endsWith(",crop=1000:540:22:42,fps=30,setpts=PTS-STARTPTS")).toBe(true);
   });
 
   test("audio off -> -an, no aac chain", () => {

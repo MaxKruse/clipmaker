@@ -293,7 +293,17 @@ export function OptionsPanel({
             <>
               <span className="chip">
                 {draft.crop.w}x{draft.crop.h} @ ({draft.crop.x},{draft.crop.y})
+                {draft.crop.angle !== 0 && ` · ${draft.crop.angle}\u00b0`}
               </span>
+              {draft.crop.angle !== 0 && (
+                <button
+                  className="btn btn-sm"
+                  title="Straighten the crop back to 0 degrees"
+                  onClick={() => onChange({ crop: { ...draft.crop!, angle: 0 } })}
+                >
+                  straighten
+                </button>
+              )}
               <button className="btn btn-sm btn-danger" onClick={onClearCrop}>
                 clear
               </button>
