@@ -140,7 +140,11 @@ Key invariants:
   about the crop center (the bbox center) by `-angle`, then crops the centered
   `w x h`. At `angle=0` this is byte-identical to the plain `crop=w:h:x:y`,
   so existing clips are untouched. `normalizeCrop` re-centers/shrinks a tilted
-  crop so its bounding box stays inside the frame.
+  crop so its EVENED bounding box stays inside the frame (the chain crops the
+  evened box, so the evened size is what must fit - on odd-sized sources the
+  raw fit can overflow by 2px); a frame too small for the 16px minimum at the
+  tilt gets a sub-minimum even crop, and a zero-slack fit with an unplaceable
+  odd center parity gives that axis 2px of slack.
 - **Progress events use `-progress pipe:1`**; both `run` and
   `runProgress` in ffmpeg.ts parse it. `runProgress` takes the expected
   total duration and reports 0..100. It reads ONLY `out_time_us`:
@@ -473,7 +477,7 @@ not be lost, short:
 
 ## Verification
 
-- `bun test` - 295 unit tests over the pure libs (times, bitrate,
+- `bun test` - 310 unit tests over the pure libs (times, bitrate,
   avif, ladder, names, vodDate, crop, combine, args, clipsTxt, clips,
   types, jobs, stages, exportView, clipSession, layout, filmstrip,
   dialogStack, ingest, range, jobFiles, ffmpeg's once).

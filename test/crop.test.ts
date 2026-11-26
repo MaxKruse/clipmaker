@@ -86,6 +86,60 @@ describe("normalizeCrop", () => {
     const c = normalizeCrop(1920, 1080, { x: 100, y: 100, w: 200, h: 200 } as never);
     expect(c.angle).toBe(0);
   });
+
+  test("a tilted crop's bbox fits the frame on odd-sized sources", () => {
+    // The evened bbox is up to 2px wider than the raw one; on an odd-sized
+    // frame a raw fit does not imply an evened fit. The fit check must use
+    // the evened size, otherwise the first ffmpeg crop overflows the frame
+    // ("Invalid too big or non positive size") and the export fails.
+    const cases: [number, number, { x: number; y: number; w: number; h: number; angle: number }][] = [
+      [99, 99, { x: 0, y: 0, w: 99, h: 99, angle: 45 }],
+      [1081, 1921, { x: 0, y: 0, w: 1081, h: 1081, angle: 45 }],
+      [33, 65, { x: 0, y: 0, w: 33, h: 65, angle: 45 }],
+      [22, 22, { x: 0, y: 0, w: 22, h: 22, angle: 45 }],
+      [20, 20, { x: 0, y: 0, w: 20, h: 20, angle: 45 }],
+      [30, 20, { x: 0, y: 0, w: 30, h: 20, angle: 45 }],
+    ];
+    for (const [W, H, c] of cases) {
+      const n = normalizeCrop(W, H, c);
+      const bb = cropBBox(n);
+      const ctx = `bbox of ${W}x${H} for a ${n.w}x${n.h}@${n.angle} crop`;
+      expect(bb.x, ctx).toBeGreaterThanOrEqual(0);
+      expect(bb.y, ctx).toBeGreaterThanOrEqual(0);
+      expect(bb.x + bb.w, ctx).toBeLessThanOrEqual(W);
+      expect(bb.y + bb.h, ctx).toBeLessThanOrEqual(H);
+    }
+  });
+
+  test("cropFilter's first crop stage is always a valid crop of the frame", () => {
+    // ffmpeg rejects a first stage whose w/h exceed the input or whose
+    // x/y go negative, failing the whole encode; every angle the UI can
+    // produce must survive normalization into a valid chain.
+    const cases: [number, number, number, number][] = [
+      [99, 99, 0, 99],
+      [1081, 1921, 0, 1081],
+      [33, 65, 0, 65],
+      [22, 22, 0, 22],
+      [30, 20, 0, 20],
+      [1920, 1080, 1700, 300],
+    ];
+    for (const [W, H, x0, size] of cases) {
+      for (const angle of [5, -12, 30, -45, 45]) {
+        const n = normalizeCrop(W, H, { x: x0, y: 0, w: size, h: size, angle });
+        const f = cropFilter(n);
+        const m = f.split(",")[0].match(/^crop=(\d+):(\d+):(-?\d+):(-?\d+)$/);
+        expect(m, `first stage of ${f} for ${W}x${H} @${angle}`).not.toBeNull();
+        const [, w, h, x, y] = m!;
+        const ctx = `${W}x${H} @${angle}: ${f}`;
+        expect(Number(w), ctx).toBeLessThanOrEqual(W);
+        expect(Number(h), ctx).toBeLessThanOrEqual(H);
+        expect(Number(x), ctx).toBeGreaterThanOrEqual(0);
+        expect(Number(y), ctx).toBeGreaterThanOrEqual(0);
+        expect(Number(x) + Number(w), ctx).toBeLessThanOrEqual(W);
+        expect(Number(y) + Number(h), ctx).toBeLessThanOrEqual(H);
+      }
+    }
+  });
 });
 
 describe("clampAngle", () => {

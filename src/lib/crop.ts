@@ -26,6 +26,22 @@ const evenCeil = (n: number) => {
   return r;
 };
 
+/**
+ * Even crop origin nearest `t` that keeps both the crop (cw wide, inside a
+ * `src` px frame) and its evened bbox (fw wide, centered on the crop) in
+ * frame. A solution exists when the caller's fit checks passed (the parity
+ * conflict is shrunk away before this is called).
+ */
+const placeEven = (t: number, cw: number, fw: number, src: number): number => {
+  let p = Math.round(t);
+  const lo = Math.max(0, (fw - cw) / 2);
+  const hi = Math.min(src - cw, src - (fw + cw) / 2);
+  if (p < lo) p = lo;
+  if (p > hi) p = hi;
+  if (p & 1) p += p < hi ? 1 : -1;
+  return p;
+};
+
 /** Rotation about the crop center, clamped to +/-MAX_TILT_DEG, rounded to 0.1°. */
 export function clampAngle(a: number): number {
   if (!Number.isFinite(a)) return 0;
@@ -53,7 +69,10 @@ export function cropBBox(c: CropBox): { x: number; y: number; w: number; h: numb
 /**
  * Clamp a crop to the frame, enforce the minimum size, round to even
  * x/y/w/h (so yuv420p output stays valid), and - when the crop is tilted -
- * shrink/re-center it so its bounding box stays inside the frame.
+ * shrink/re-center it so its EVENED bounding box stays inside the frame
+ * (the filter chain crops the evened box, so that is the size that must
+ * fit). A frame too small to hold the 16px minimum at the tilt gets a
+ * sub-minimum even crop instead of an encode that cannot run.
  */
 export function normalizeCrop(srcW: number, srcH: number, c: CropBox): CropBox {
   const angle = clampAngle(c.angle);
@@ -71,22 +90,50 @@ export function normalizeCrop(srcW: number, srcH: number, c: CropBox): CropBox {
     const a = (Math.abs(angle) * Math.PI) / 180;
     const co = Math.cos(a);
     const si = Math.sin(a);
-    let bw = w * co + h * si;
-    let bh = w * si + h * co;
-    if (bw > srcW || bh > srcH) {
-      // A thin, wide crop at a large angle: shrink so the bbox fits.
-      const k = Math.min(srcW / bw, srcH / bh);
+    // The filter chain crops the EVENED bbox, so it is the evened size that
+    // must fit the frame: the raw size can sit 1px under the frame while its
+    // even ceiling is 2px over (odd-sized sources).
+    const fit = (cw: number, ch: number) => ({
+      w: evenCeil(cw * co + ch * si),
+      h: evenCeil(cw * si + ch * co),
+    });
+    let f = fit(w, h);
+    if (f.w > srcW || f.h > srcH) {
+      // A thin, wide crop at a large angle: shrink so the evened bbox fits.
+      const k = Math.min(srcW / f.w, srcH / f.h);
       w = even(Math.max(MIN_CROP, Math.floor(w * k)));
       h = even(Math.max(MIN_CROP, Math.floor(h * k)));
-      bw = w * co + h * si;
-      bh = w * si + h * co;
+      f = fit(w, h);
+      // The 16px floor can still overflow a tiny frame (a 16px crop at 45
+      // deg needs 24px): there a sub-minimum even crop is the lesser evil -
+      // an export that runs beats a minimum size that cannot fit.
+      if (f.w > srcW || f.h > srcH) {
+        const k2 = Math.min(srcW / f.w, srcH / f.h);
+        w = even(Math.max(2, Math.floor(w * k2)));
+        h = even(Math.max(2, Math.floor(h * k2)));
+        f = fit(w, h);
+      }
     }
-    const bw2 = evenCeil(bw);
-    const bh2 = evenCeil(bh);
-    const cx = clamp(x + w / 2, bw2 / 2, srcW - bw2 / 2);
-    const cy = clamp(y + h / 2, bh2 / 2, srcH - bh2 / 2);
-    x = even(clamp(cx - w / 2, 0, srcW - w));
-    y = even(clamp(cy - h / 2, 0, srcH - h));
+    // A zero-slack fit pins the crop center to one half-step parity; when
+    // that pinned parity is odd, no even x (or y) can hold the bbox in
+    // frame, so give the pinned axis 2px of slack.
+    if (srcW - f.w === 0 && ((f.w - w) / 2) % 2 !== 0) {
+      const k = (srcW - 2) / f.w;
+      w = even(Math.max(2, Math.floor(w * k)));
+      f = fit(w, h);
+    }
+    if (srcH - f.h === 0 && ((f.h - h) / 2) % 2 !== 0) {
+      const k = (srcH - 2) / f.h;
+      h = even(Math.max(2, Math.floor(h * k)));
+      f = fit(w, h);
+    }
+    // Center the crop on the clamped target while the evened bbox stays in
+    // frame and x/y stay even (the fit checks above make an even placement
+    // exist on both axes).
+    const cx = clamp(x + w / 2, f.w / 2, srcW - f.w / 2);
+    const cy = clamp(y + h / 2, f.h / 2, srcH - f.h / 2);
+    x = placeEven(cx - w / 2, w, f.w, srcW);
+    y = placeEven(cy - h / 2, h, f.h, srcH);
   }
   return { x, y, w, h, angle };
 }

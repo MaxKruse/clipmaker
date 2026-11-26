@@ -18,7 +18,10 @@ rotation `angle` (degrees) about its center.
   bbox so the content is preserved, not clipped), then crop the centered
   `w x h`. The output is the crop's content at 0 degrees, sized `w x h`, with
   no black corners. `normalizeCrop` re-centers/shrinks a tilted crop so its
-  bounding box stays inside the frame before this runs.
+  EVENED bounding box stays inside the frame before this runs (the chain crops
+  the evened box, so on odd-sized sources the evened size - not the raw one -
+  is what must fit; a frame too small for the 16px minimum at the tilt gets a
+  sub-minimum even crop instead of a failing encode).
 
 ## MP4
 
